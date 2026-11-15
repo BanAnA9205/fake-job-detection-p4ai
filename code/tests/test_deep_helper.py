@@ -1,16 +1,25 @@
-"""Static tests for modules/deep_helper.py.
+"""Static tests for modules/deep_helper.py, plus the cache-hit branch of embed_texts.
 
-Torch and sentence-transformers are not installed, so this file only compiles
-the module and checks the source; no function from the module is executed.
+embed_texts is never run with a real model: the cache test pre-writes tiny
+arrays, so sentence-transformers is not imported.
 """
 
 import ast
+import os
 import py_compile
+import sys
+import tempfile
 from pathlib import Path
+
+import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULE = ROOT / "modules" / "deep_helper.py"
 HEAVY = {"torch", "transformers", "sentence_transformers"}
+
+sys.path.insert(0, str(ROOT))
+
+from modules.deep_helper import embed_texts
 
 
 def test_module_compiles():
@@ -19,7 +28,7 @@ def test_module_compiles():
 
 
 def test_heavy_imports_are_lazy():
-    """Torch, transformers and sentence-transformers must not be imported at module level."""
+    """Heavy machine-learning packages must not be imported at module level."""
     tree = ast.parse(MODULE.read_text())
     for node in tree.body:
         if isinstance(node, ast.Import):
@@ -33,21 +42,34 @@ def test_heavy_imports_are_lazy():
 
 
 def test_public_api_is_defined():
-    """All contract names must exist as module-level functions or constants."""
+    """embed_texts stays; the torch MLP head helpers and _PATIENCE must be gone."""
     tree = ast.parse(MODULE.read_text())
     functions = {node.name for node in tree.body if isinstance(node, ast.FunctionDef)}
-    assigned = set()
-    for node in tree.body:
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name):
-                    assigned.add(target.id)
-    for name in ["embed_texts", "make_mlp", "train_mlp", "predict_scores", "fine_tune_note"]:
-        assert name in functions | assigned, f"missing {name}"
+    assigned = {t.id for node in tree.body if isinstance(node, ast.Assign)
+                for t in node.targets if isinstance(t, ast.Name)}
+    assert "embed_texts" in functions, "missing embed_texts"
+    removed = ["make_mlp", "_train_epoch", "_val_pr_auc", "train_mlp", "predict_scores"]
+    for name in removed:
+        assert name not in functions, f"{name} should have been deleted"
+    for name in ["fine_tune_note", "_PATIENCE"]:
+        assert name not in assigned, f"{name} should have been deleted"
+
+
+def test_embed_texts_cache_hit():
+    """Matching cached ids must be returned as is, without importing sentence-transformers."""
+    with tempfile.TemporaryDirectory() as tmp:
+        emb = np.arange(6, dtype=np.float32).reshape(3, 2)
+        np.save(os.path.join(tmp, "tiny_model_emb.npy"), emb)
+        np.save(os.path.join(tmp, "tiny_model_ids.npy"), np.array([5, 6, 7]))
+        out = embed_texts(["a", "b", "c"], np.array([5, 6, 7]),
+                          model_name="tiny_model", cache_dir=tmp)
+        assert np.array_equal(out, emb), "cache hit must return the stored matrix"
+        assert "sentence_transformers" not in sys.modules
 
 
 if __name__ == "__main__":
     test_module_compiles()
     test_heavy_imports_are_lazy()
     test_public_api_is_defined()
+    test_embed_texts_cache_hit()
     print("all deep_helper static tests passed")

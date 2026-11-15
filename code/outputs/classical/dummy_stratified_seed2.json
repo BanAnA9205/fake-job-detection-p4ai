@@ -1,0 +1,32 @@
+{
+  "model": "dummy_stratified",
+  "group": "classical",
+  "seed": 2,
+  "thr": 0.0,
+  "val": {
+    "precision": 0.04857954545454545,
+    "recall": 1.0,
+    "f1": 0.0926578163099431,
+    "tp": 171,
+    "fp": 3349,
+    "fn": 0,
+    "tn": 0,
+    "pr_auc": 0.048044590643274855,
+    "roc_auc": 0.4915659557972268
+  },
+  "test": {
+    "precision": 0.04857954545454545,
+    "recall": 1.0,
+    "f1": 0.0926578163099431,
+    "tp": 171,
+    "fp": 3349,
+    "fn": 0,
+    "tn": 0,
+    "pr_auc": 0.04818285191092208,
+    "roc_auc": 0.49463923070341326
+  },
+  "train_pr_auc": 0.048565105350136986,
+  "best_params": {},
+  "seconds": 0.0,
+  "notes": "tuned with 4 random candidates, 3-fold grouped CV; cv PR-AUC None; warnings: none"
+}

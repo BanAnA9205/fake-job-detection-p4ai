@@ -1,0 +1,36 @@
+{
+  "model": "logreg_bm25",
+  "group": "classical",
+  "seed": 3,
+  "thr": 0.6964742797485828,
+  "val": {
+    "precision": 0.8516129032258064,
+    "recall": 0.7719298245614035,
+    "f1": 0.8098159509202454,
+    "tp": 132,
+    "fp": 23,
+    "fn": 39,
+    "tn": 3326,
+    "pr_auc": 0.861815029868004,
+    "roc_auc": 0.983608618440697
+  },
+  "test": {
+    "precision": 0.8867924528301887,
+    "recall": 0.8245614035087719,
+    "f1": 0.8545454545454546,
+    "tp": 141,
+    "fp": 18,
+    "fn": 30,
+    "tn": 3331,
+    "pr_auc": 0.9057116688019785,
+    "roc_auc": 0.988726668866852
+  },
+  "train_pr_auc": 1.0,
+  "best_params": {
+    "pre__text__bm25__k1": 1.2,
+    "pre__text__bm25__b": 0.5,
+    "clf__C": 10
+  },
+  "seconds": 80.0,
+  "notes": "tuned with 4 random candidates, 3-fold grouped CV; cv PR-AUC 0.8164972149927484; warnings: none"
+}

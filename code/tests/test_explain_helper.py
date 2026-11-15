@@ -17,7 +17,10 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.feature_extraction.text import TfidfVectorizer
 
-from modules.explain_helper import permutation_table, show_errors, top_linear_terms
+from sklearn.tree import DecisionTreeClassifier
+
+from modules.explain_helper import (permutation_table, show_errors, top_linear_terms,
+                                    top_tree_features, tree_rules)
 
 
 def _make_data(n=60, seed=0):
@@ -128,6 +131,24 @@ def test_show_errors():
     # 6 false positives (rows 0-4 and the tail row labelled 0) plus 5 FNs.
     all_errs = show_errors(df, y_true, score, thr=0.5, k=50)
     assert len(all_errs) == 11
+
+
+def test_tree_helpers():
+    df = _make_data()
+    pre = _make_pipe().named_steps["pre"]
+    pipe = Pipeline([("pre", pre), ("clf", DecisionTreeClassifier(max_depth=3, random_state=0))])
+    pipe.fit(df, df["y"])
+    top = top_tree_features(pipe, k=3)
+    assert len(top) == 3 and top["importance"].is_monotonic_decreasing
+    # Only 'description' words carry signal, so the top feature must be a text term.
+    assert top.loc[0, "term"].startswith("txt__")
+    rules = tree_rules(pipe, max_depth=2)
+    assert "txt__" in rules and "class:" in rules
+    try:
+        top_tree_features(_make_pipe().fit(df, df["y"]))
+    except TypeError:
+        return
+    raise AssertionError("expected TypeError for a non-tree estimator")
 
 
 if __name__ == "__main__":

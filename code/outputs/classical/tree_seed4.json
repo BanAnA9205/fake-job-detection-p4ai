@@ -1,0 +1,35 @@
+{
+  "model": "tree",
+  "group": "classical",
+  "seed": 4,
+  "thr": 0.9132173980804449,
+  "val": {
+    "precision": 0.44871794871794873,
+    "recall": 0.8187134502923976,
+    "f1": 0.5797101449275363,
+    "tp": 140,
+    "fp": 172,
+    "fn": 31,
+    "tn": 3177,
+    "pr_auc": 0.4953703756659371,
+    "roc_auc": 0.8803238812668179
+  },
+  "test": {
+    "precision": 0.4444444444444444,
+    "recall": 0.7953216374269005,
+    "f1": 0.570230607966457,
+    "tp": 136,
+    "fp": 170,
+    "fn": 35,
+    "tn": 3179,
+    "pr_auc": 0.5093926121644626,
+    "roc_auc": 0.8923349729953428
+  },
+  "train_pr_auc": 0.54192465674064,
+  "best_params": {
+    "clf__min_samples_leaf": 20,
+    "clf__max_depth": 10
+  },
+  "seconds": 91.0,
+  "notes": "tuned with 4 random candidates, 3-fold grouped CV; cv PR-AUC 0.3522611153890563; warnings: none"
+}

@@ -10,5 +10,4 @@ code/features/
 *.npy
 *.pt
 *.pth
-outputs/
 logs/

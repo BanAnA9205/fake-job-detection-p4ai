@@ -138,6 +138,26 @@ def make_splits(df, seed=0, val_size=0.2, test_size=0.2):
     return splits
 
 
+def save_splits(path, splits, df):
+    """Save split indices plus a fingerprint of the cleaned data, so any machine can reuse them."""
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    np.savez(path, train=splits["train"], val=splits["val"], test=splits["test"],
+             fingerprint=_fingerprint(df))
+
+
+def load_splits(path, df):
+    """Load saved indices and check they belong to this exact cleaned data frame."""
+    z = np.load(path)
+    assert str(z["fingerprint"]) == _fingerprint(df), "splits were made for different data; rebuild them"
+    return {k: z[k] for k in ("train", "val", "test")}
+
+
+def _fingerprint(df):
+    """Short hash of the ordered job_ids; changes if rows are dropped, added or reordered."""
+    ids = ",".join(map(str, df["job_id"].tolist()))
+    return hashlib.sha256(ids.encode("utf-8")).hexdigest()[:16]
+
+
 def save_metadata(path, df, splits, seed):
     """Write split sizes, positives and column lists to a JSON file."""
     y = df[TARGET].to_numpy()

@@ -1,19 +1,13 @@
 """Baselines, candidate models, tuning grids and the grouped CV search helper."""
 
-from sklearn.compose import ColumnTransformer
-from sklearn.decomposition import TruncatedSVD
 from sklearn.dummy import DummyClassifier
-from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import RandomizedSearchCV, StratifiedGroupKFold
+from sklearn.neural_network import MLPClassifier
 from sklearn.pipeline import Pipeline
-from sklearn.svm import LinearSVC
+from sklearn.tree import DecisionTreeClassifier
 
-from modules.features import (BINARY_COLS, NOMINAL_COLS, NUMERIC_COLS,
-                              ORDINAL_COLS, make_preprocessor, make_tfidf)
-
-# Number of dense text components given to the tree model.
-TEXT_SVD_COMPONENTS = 100
+from modules.features import make_preprocessor
 
 
 def get_baselines(seed=0):
@@ -24,60 +18,56 @@ def get_baselines(seed=0):
     }
 
 
-def _hist_gb_pipeline(seed):
-    """Dense pipeline for the tree model: compressed text plus metadata columns."""
-    meta_cols = NOMINAL_COLS + ORDINAL_COLS + NUMERIC_COLS + BINARY_COLS
-    text_branch = Pipeline([
-        ("tfidf", make_tfidf()),
-        # TruncatedSVD is LSA: 20000 sparse TF-IDF columns become 100 dense ones,
-        # because HistGradientBoostingClassifier cannot take sparse input.
-        ("svd", TruncatedSVD(n_components=TEXT_SVD_COMPONENTS, random_state=seed)),
-    ])
-    pre = ColumnTransformer(
-        [("meta", make_preprocessor("meta"), meta_cols),
-         ("text_svd", text_branch, "text")],
-        sparse_threshold=0,
-    )
-    clf = HistGradientBoostingClassifier(class_weight="balanced", random_state=seed)
-    return Pipeline([("pre", pre), ("clf", clf)])
+def _logreg(seed):
+    # class_weight="balanced" makes a missed fraud cost about 20x a false alarm (4.8% positives).
+    return LogisticRegression(class_weight="balanced", solver="liblinear",
+                              max_iter=1000, random_state=seed)
 
 
-def get_models(seed=0, kind_pre="tfidf"):
-    """Three candidate pipelines: two sparse linear models and one dense tree model.
+def get_models(seed=0):
+    """Four candidate pipelines. Each is preprocessing ("pre") followed by a classifier ("clf").
 
-    kind_pre picks the preprocessor for the linear models; hist_gb always uses
-    its own dense text plus metadata block.
+    logreg and logreg_bm25 differ only in how words are weighted, so the pair isolates
+    TF-IDF versus BM25. tree and mlp use the TF-IDF features.
     """
-    logreg = Pipeline([
-        ("pre", make_preprocessor(kind_pre)),
-        ("clf", LogisticRegression(class_weight="balanced", solver="liblinear",
-                                   max_iter=1000, random_state=seed)),
-    ])
-    svm = Pipeline([
-        ("pre", make_preprocessor(kind_pre)),
-        ("clf", LinearSVC(class_weight="balanced", dual="auto", max_iter=5000,
-                          random_state=seed)),
-    ])
-    return {"logreg": logreg, "linear_svm": svm, "hist_gb": _hist_gb_pipeline(seed)}
+    return {
+        "logreg": Pipeline([("pre", make_preprocessor("tfidf")), ("clf", _logreg(seed))]),
+        "logreg_bm25": Pipeline([("pre", make_preprocessor("bm25")), ("clf", _logreg(seed))]),
+        "tree": Pipeline([
+            ("pre", make_preprocessor("tfidf")),
+            ("clf", DecisionTreeClassifier(class_weight="balanced", min_samples_leaf=5,
+                                           random_state=seed)),
+        ]),
+        "mlp": Pipeline([
+            ("pre", make_preprocessor("tfidf")),
+            # MLPClassifier has no class_weight; the decision threshold is chosen on
+            # validation later, which handles the imbalance for ranking-based scores.
+            ("clf", MLPClassifier(hidden_layer_sizes=(128,), early_stopping=True,
+                                  n_iter_no_change=5, max_iter=100, random_state=seed)),
+        ]),
+    }
 
 
-# Small grids for tune(); names follow the Pipeline structure (step__param).
-# The pre__text__... keys assume the default kind_pre="tfidf".
+# Small grids for tune(); names follow the Pipeline structure ("step__part__param").
+# In the logreg_bm25 grid the text pipeline has one more level: pre__text__bm25__k1.
 PARAM_GRIDS = {
     "logreg": {
         "clf__C": [0.1, 1, 10],
         "pre__text__max_features": [10000, 30000],
         "pre__text__ngram_range": [(1, 1), (1, 2)],
     },
-    "linear_svm": {
-        "clf__C": [0.01, 0.1, 1],
-        "pre__text__max_features": [10000, 30000],
-        "pre__text__ngram_range": [(1, 1), (1, 2)],
+    "logreg_bm25": {
+        "clf__C": [0.1, 1, 10],
+        "pre__text__bm25__k1": [1.2, 1.5, 2.0],
+        "pre__text__bm25__b": [0.5, 0.75, 1.0],
     },
-    "hist_gb": {
-        "clf__learning_rate": [0.05, 0.1],
-        "clf__max_leaf_nodes": [15, 31, 63],
-        "pre__text_svd__tfidf__max_features": [10000, 30000],
+    "tree": {
+        "clf__max_depth": [10, 20, 40],
+        "clf__min_samples_leaf": [2, 5, 20],
+    },
+    "mlp": {
+        "clf__hidden_layer_sizes": [(64,), (128,), (256,)],
+        "clf__alpha": [1e-4, 1e-3, 1e-2],
     },
 }
 

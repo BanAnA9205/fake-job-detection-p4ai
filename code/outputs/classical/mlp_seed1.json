@@ -1,0 +1,37 @@
+{
+  "model": "mlp",
+  "group": "classical",
+  "seed": 1,
+  "thr": 0.3137610970016427,
+  "val": {
+    "precision": 0.8417721518987342,
+    "recall": 0.7777777777777778,
+    "f1": 0.8085106382978724,
+    "tp": 133,
+    "fp": 25,
+    "fn": 38,
+    "tn": 3324,
+    "pr_auc": 0.8658653811230578,
+    "roc_auc": 0.9864723518760073
+  },
+  "test": {
+    "precision": 0.7938931297709924,
+    "recall": 0.6081871345029239,
+    "f1": 0.6887417218543046,
+    "tp": 104,
+    "fp": 27,
+    "fn": 67,
+    "tn": 3322,
+    "pr_auc": 0.7840843223794192,
+    "roc_auc": 0.9833851075384291
+  },
+  "train_pr_auc": 0.9866180860799687,
+  "best_params": {
+    "clf__hidden_layer_sizes": [
+      64
+    ],
+    "clf__alpha": 0.01
+  },
+  "seconds": 483.1,
+  "notes": "tuned with 4 random candidates, 3-fold grouped CV; cv PR-AUC 0.8100079625266826; warnings: none"
+}

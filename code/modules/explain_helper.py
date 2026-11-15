@@ -3,6 +3,7 @@
 import numpy as np
 import pandas as pd
 from sklearn.inspection import permutation_importance
+from sklearn.tree import export_text
 
 
 def top_linear_terms(pipe, k=20):
@@ -93,3 +94,22 @@ def show_errors(df, y_true, score, thr, k=10):
                 }
             )
     return pd.DataFrame(rows)
+
+
+def top_tree_features(pipe, k=20):
+    """The k features a fitted decision tree relies on most (impurity importance)."""
+    pre, clf = pipe.named_steps["pre"], pipe.named_steps["clf"]
+    if not hasattr(clf, "feature_importances_"):
+        raise TypeError("top_tree_features needs a tree estimator with feature_importances_")
+    names = np.asarray(pre.get_feature_names_out())
+    imp = np.asarray(clf.feature_importances_, dtype=float)
+    assert len(names) == len(imp), "feature names and importances misaligned"
+    order = np.argsort(-imp)[:k]
+    return pd.DataFrame({"term": names[order], "importance": imp[order]})
+
+
+def tree_rules(pipe, max_depth=3):
+    """The top levels of a fitted decision tree as readable if/else text."""
+    pre, clf = pipe.named_steps["pre"], pipe.named_steps["clf"]
+    return export_text(clf, feature_names=list(pre.get_feature_names_out()),
+                       max_depth=max_depth)

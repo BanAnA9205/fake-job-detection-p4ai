@@ -1,0 +1,39 @@
+{
+  "model": "logreg",
+  "group": "classical",
+  "seed": 0,
+  "thr": 0.7288515517432503,
+  "val": {
+    "precision": 0.8536585365853658,
+    "recall": 0.8187134502923976,
+    "f1": 0.835820895522388,
+    "tp": 140,
+    "fp": 24,
+    "fn": 31,
+    "tn": 3325,
+    "pr_auc": 0.8781160113594462,
+    "roc_auc": 0.9860550151131786
+  },
+  "test": {
+    "precision": 0.8671328671328671,
+    "recall": 0.7251461988304093,
+    "f1": 0.7898089171974522,
+    "tp": 124,
+    "fp": 19,
+    "fn": 47,
+    "tn": 3330,
+    "pr_auc": 0.8268133366048688,
+    "roc_auc": 0.982459632708725
+  },
+  "train_pr_auc": 1.0,
+  "best_params": {
+    "pre__text__ngram_range": [
+      1,
+      2
+    ],
+    "pre__text__max_features": 30000,
+    "clf__C": 10
+  },
+  "seconds": 57.4,
+  "notes": "tuned with 4 random candidates, 3-fold grouped CV; cv PR-AUC 0.8142062846274286; warnings: none"
+}

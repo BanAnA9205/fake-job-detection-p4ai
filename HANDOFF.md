@@ -31,48 +31,48 @@ Read this, then `docs/spec.md`, `code/CODE_SPEC.md` and the code. Do not trust n
 
 ## Code (in `code/`)
 - `modules/data_helper.py`: `load_raw`, `audit`, `clean` (drops duplicates, adds `group` = hash of normalised description),
-  `make_splits` (StratifiedGroupKFold, test first then val, 60/20/20, no description group in two splits), metadata, seeding.
-- `modules/features.py`: `add_engineered_features`, `make_preprocessor("tfidf"|"meta")`. Binary flags go through
-  `VarianceThreshold(0.001)`; regexes match the placeholders.
-- `modules/models.py`: baselines, `get_models` (logreg, linear_svm, hist_gb), `PARAM_GRIDS`, `tune`.
-- `modules/eval_helper.py`, `modules/explain_helper.py`: metrics, threshold choice on validation, tables, plots,
-  linear coefficients, permutation importance, error reading.
-- `modules/deep_helper.py`: `embed_texts` (cached sentence-transformers embeddings), a small MLP head, `train_mlp`.
-  NEVER RUN so far (torch was not installed on the laptop); only compiled and statically tested. Untested = assume bugs.
-- `tests/`: 6 plain-assert scripts on synthetic data, all passing on the laptop (Python 3.14, scikit-learn 1.9.1).
-  Run them again after installing dependencies on NRC.
+  `make_splits` (StratifiedGroupKFold, test first then val, 60/20/20, no description group in two splits),
+  `save_splits`/`load_splits` (with a data fingerprint, so every machine uses the identical rows), metadata, seeding.
+- `modules/features.py`: `add_engineered_features`, `make_preprocessor("tfidf"|"bm25")`, `Bm25Transformer`.
+  Binary flags go through `VarianceThreshold(0.001)`; regexes match the `#URL_`, `#EMAIL_`, `#PHONE_` placeholders.
+- `modules/models.py`: baselines, `get_models` = logreg, logreg_bm25, tree, mlp (sklearn `MLPClassifier`), `PARAM_GRIDS`, `tune`.
+  SVM and HistGradientBoosting were removed on the owner's request (lineup: simple method, classic ML, MLP, TF-IDF vs BM25, BERT).
+- `modules/eval_helper.py`, `explain_helper.py`, `results_helper.py`: metrics, threshold on validation, tables, plots,
+  linear coefficients, tree importances and rules, permutation importance, error reading, one shared results format.
+- `modules/deep_helper.py` (`embed_texts`, cached), `modules/finetune_helper.py` (plain PyTorch fine-tuning loop).
+- `run_classical.py` (done, results committed) and `run_deep.py` (embeddings, sklearn heads on embeddings, BERT; NOT yet run on
+  real data). Both write `outputs/<group>/<model>_seed<N>.json/.npz`; the notebook `03_results` reads them.
+- `notebooks/`: `01_eda`, `02_classical_demo` (validation only), `03_results` (reads saved results), built by `build_notebooks.py`
+  and executed with saved outputs. Do not rebuild casually: rebuilding wipes the saved outputs and the findings cells.
+- `tests/`: plain-assert scripts, all pass on the laptop (Python 3.14, scikit-learn 1.9.1, CPU torch for the tiny BERT smoke test).
+- `SERVER.md`: step-by-step commands for the GPU server. `CODE_SPEC.md`, `DEEP_SPEC.md`, `NOTEBOOK_SPEC.md`: the contracts
+  the modules were written against (the agents' safety rules in them were for the laptop).
 
-## Measured so far (laptop, real data, split seed 0, VALIDATION set only, threshold picked on validation)
-| model | val PR-AUC | val F1 | val precision | val recall |
+## Measured (classical, 5 split seeds 0-4, tuned on train with 3-fold grouped CV, threshold chosen on validation, TEST set)
+| model | test PR-AUC | test F1 | test recall | test precision |
 |---|---|---|---|---|
-| linear SVM | 0.893 | 0.855 | 0.846 | 0.865 |
-| logistic regression | 0.825 | 0.773 | 0.852 | 0.708 |
-| hist gradient boosting | 0.814 | 0.744 | 0.799 | 0.696 |
-| dummy baselines | 0.049 | | | |
-Train PR-AUC is 0.98-1.00 for all three, so there is a large generalisation gap. One seed, 171 validation positives:
-differences of a few points are within noise. The TEST set has not been touched. A tiny tuning pilot (logreg, 2 candidates,
-3 folds) picked C=10, ngram (1,2), 30000 features, CV PR-AUC 0.813.
-For context only: the Fraud-BERT paper (Taneja et al. 2025, Discover Computing 28:9) reports fine-tuned BERT P 0.94 R 0.92
-F1 0.93 vs SVM F1 0.89 on a single 80:20 split without dedup or seeds; its numbers are NOT comparable with ours.
+| logreg + BM25 | 0.847 +- 0.073 | 0.804 +- 0.055 | 0.760 | 0.856 |
+| MLP (TF-IDF) | 0.846 +- 0.077 | 0.787 +- 0.081 | 0.726 | 0.863 |
+| logreg + TF-IDF | 0.821 +- 0.063 | 0.772 +- 0.042 | 0.726 | 0.827 |
+| decision tree | 0.402 +- 0.066 | 0.501 +- 0.055 | 0.634 | 0.434 |
+| dummy | 0.049 | 0.093 | | |
+(mean +- std over seeds.) The spread between seeds (about 0.07) is larger than the gaps between logreg, BM25 and MLP, so those three are
+statistically indistinguishable here. Train PR-AUC is about 1.0 for logreg and 0.99 for the MLP: large generalisation gap.
+Honesty note: during the pilot of the runner the seed-0 test numbers for four models were printed once; no choice was made from them,
+and the runner now prints validation only.
+Dataset observation (unverified hypothesis): fraud rate differs sharply by country (Greece 940 ads and 0% fraud, Australia 19%,
+US 6.9%); the country and "missing company profile" signals may reflect how the dataset was collected rather than fraud itself.
 
-## Open issues
-1. `LinearSVC` prints "Liblinear failed to converge" at `max_iter=5000`. Tested on seed 0: `max_iter=50000` converges in
-   14 s with the same scores (PR-AUC 0.893); scaling the ordinal columns did not help; `C=0.1` converges but PR-AUC drops
-   to 0.853. Proposed fix (awaiting the owner's yes): set `max_iter=50000` in `models.py`.
-2. Splits must be identical on every machine. `StratifiedGroupKFold` may split differently across scikit-learn versions,
-   so save the train/val/test indices once (one file per seed) and load them everywhere. Not implemented yet.
-3. Ordinal level orders in `features.py` are judgment calls ("Not Applicable" ranks below "Internship", etc.).
-4. Two false negatives looked like the same posting with different capitalisation (possible near-duplicates that exact
-   dedup misses). Unconfirmed.
-
-## Agreed plan for the deep part (the owner chose option B)
-Frozen `sentence-transformers/all-MiniLM-L6-v2` embeddings (Session 7 model), then compare on the same splits and seeds:
-embeddings + LR, embeddings + SVM, MLP head, embeddings combined with TF-IDF and metadata; PLUS a fine-tuned DistilBERT
-(plain PyTorch loop, no Trainer, so it is easy to explain; class weighting for the 4.8% positives; early stopping on
-validation PR-AUC; test touched once). Explanation: compare which frauds each model catches, SVM top words, LIME on raw text
-for about five examples. Run one seed first to measure real timing, then more seeds. Still to write: split save/load,
-fine-tuning helper, hybrid-feature helper, the notebook(s), a seed-loop runner, final tables and plots.
-Remaining classical work: full tuning (validation only), multi-seed comparison, then a single test evaluation.
+## Open issues / next steps
+1. Run `SERVER.md` on NRC: embeddings, sklearn heads, then DistilBERT (one seed first to measure the real time). Push the small
+   result files back; then re-run `03_results.ipynb` locally (it picks up `outputs/deep/`), and add a findings cell.
+2. Not yet verified: downloading the real models, bf16 on CUDA, memory/time of the BERT run (all estimates).
+3. Ordinal level orders in `features.py` are judgment calls ("Not Applicable" below "Internship", etc.).
+4. Two false negatives looked like the same posting with different capitalisation (possible near-duplicates that exact dedup
+   misses). Unconfirmed.
+5. Writing: literature review (`docs/literature_review.md`, a draft, tags [V]/[M]), report, slides. The explanation story is:
+   logreg coefficients, tree rules/importances, permutation importance, reading real errors; LIME on raw text for a few BERT examples
+   is planned but not implemented.
 
 ## Other material not in this repo
 - Slides (course PDFs) and syllabus, the previous course's project (`older_work`, an image-classification pipeline whose

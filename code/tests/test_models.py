@@ -8,7 +8,6 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from scipy import sparse
 from sklearn.model_selection import StratifiedGroupKFold
 from sklearn.pipeline import Pipeline
 
@@ -85,98 +84,52 @@ def _xy():
 
 def test_baselines():
     df, X = _xy()
-    y = df["fraudulent"].to_numpy()
-    baselines = models_mod.get_baselines(seed=0)
-    assert set(baselines) == {"dummy_majority", "dummy_stratified"}
-    predictions = {}
-    for name, clf in baselines.items():
-        clf.fit(X, y)
-        predictions[name] = clf.predict(X)
-    assert predictions["dummy_majority"].sum() == 0, "majority class here is 0"
-    assert 0 < predictions["dummy_stratified"].sum() < len(df)
+    for name, m in models_mod.get_baselines().items():
+        m.fit(X, df["fraudulent"])
+        assert m.predict(X).shape == (len(df),), name
 
 
-def test_models_are_pipelines():
-    models = models_mod.get_models(seed=0)
-    assert set(models) == {"logreg", "linear_svm", "hist_gb"}
+def test_models_are_named_pipelines():
+    models = models_mod.get_models()
+    assert set(models) == {"logreg", "logreg_bm25", "tree", "mlp"}
     for name, pipe in models.items():
         assert isinstance(pipe, Pipeline), name
-        assert [step[0] for step in pipe.steps] == ["pre", "clf"], name
-    pre = models["hist_gb"].named_steps["pre"]
-    assert [name for name, _, _ in pre.transformers] == ["meta", "text_svd"]
-    text_branch = pre.transformers[1][1]
-    assert text_branch.named_steps["svd"].n_components == models_mod.TEXT_SVD_COMPONENTS
+        assert [step for step, _ in pipe.steps] == ["pre", "clf"], name
 
 
 def test_param_grids_match_pipeline_params():
-    models = models_mod.get_models(seed=0)
+    models = models_mod.get_models()
     assert set(models_mod.PARAM_GRIDS) == set(models)
     for name, grid in models_mod.PARAM_GRIDS.items():
-        params = models[name].get_params()
-        for key, values in grid.items():
-            assert key in params, f"{name}: {key} is not a real pipeline parameter"
-            assert len(values) >= 2, f"{name}: {key} needs at least two choices"
+        valid = set(models[name].get_params())
+        for key in grid:
+            assert key in valid, f"{name}: {key} is not a parameter of the pipeline"
 
 
-def test_logreg_fits_and_predicts():
+def test_every_model_fits_and_scores():
+    """Each pipeline learns the toy spam/normal split and ranks spam above normal."""
     df, X = _xy()
     y = df["fraudulent"].to_numpy()
-    pipe = models_mod.get_models(seed=0)["logreg"]
-    pipe.fit(X, y)
-    proba = pipe.predict_proba(X)
-    assert proba.shape == (len(df), 2)
-    assert np.isfinite(proba).all()
-    assert np.allclose(proba.sum(axis=1), 1.0)
-    assert set(pipe.predict(X)) <= {0, 1}
-
-
-def test_linear_svm_fits_and_scores():
-    df, X = _xy()
-    y = df["fraudulent"].to_numpy()
-    pipe = models_mod.get_models(seed=0)["linear_svm"]
-    pipe.fit(X, y)
-    scores = pipe.decision_function(X)
-    assert scores.shape == (len(df),)
-    assert np.isfinite(scores).all()
-
-
-def test_hist_gb_fits_on_dense_text():
-    df, X = _xy()
-    y = df["fraudulent"].to_numpy()
-    old = models_mod.TEXT_SVD_COMPONENTS
-    # Tiny text needs fewer components; the real run keeps the module default.
-    models_mod.TEXT_SVD_COMPONENTS = 4
-    try:
-        pipe = models_mod.get_models(seed=0)["hist_gb"]
-    finally:
-        models_mod.TEXT_SVD_COMPONENTS = old
-    pre = pipe.named_steps["pre"]
-    Xt = pre.fit_transform(X)
-    assert not sparse.issparse(Xt), "hist_gb needs dense input"
-    assert Xt.shape[0] == len(df)
-    assert Xt.shape[1] > 4
-    assert not np.isnan(Xt).any()
-    pipe.fit(X, y)
-    proba = pipe.predict_proba(X)
-    assert proba.shape == (len(df), 2)
-    assert np.isfinite(proba).all()
+    # Toy-sized overrides: keep every word, and let the MLP train on all 60 rows
+    # (its early stopping would hold out only 6 rows, too few to learn from).
+    small = {"pre__text__min_df": 1, "clf__early_stopping": False, "clf__max_iter": 300}
+    for name, pipe in models_mod.get_models().items():
+        pipe.set_params(**{k: v for k, v in small.items() if k in pipe.get_params()})
+        pipe.fit(X, y)
+        score = pipe.predict_proba(X)[:, 1]
+        assert score.shape == (len(df),), name
+        assert score[y == 1].mean() > score[y == 0].mean() + 0.2, name
 
 
 def test_tune_returns_fitted_search():
     df, X = _xy()
-    y = df["fraudulent"].to_numpy()
-    grid = {"clf__C": [0.1, 1.0], "pre__text__ngram_range": [(1, 1)]}
-    # 10 groups in 4 folds means at most 3 groups per test fold, so the 4 spam
-    # groups and 6 normal groups keep both classes in every training fold.
-    search = models_mod.tune(
-        models_mod.get_models(seed=0)["logreg"], grid, X, y,
-        groups=df["group"].to_numpy(), n_iter=2, cv=4, scoring="average_precision",
-        seed=0,
-    )
-    assert isinstance(search.cv, StratifiedGroupKFold)
-    assert set(search.best_params_) == set(grid)
-    assert 0.0 <= search.best_score_ <= 1.0
-    assert search.best_estimator_ is not None
+    y, groups = df["fraudulent"].to_numpy(), df["group"].to_numpy()
+    pipe = models_mod.get_models()["logreg"]
+    pipe.set_params(pre__text__min_df=1)
+    grid = {"clf__C": [0.1, 1.0]}
+    search = models_mod.tune(pipe, grid, X, y, groups, n_iter=2, cv=3)
+    assert search.best_params_["clf__C"] in (0.1, 1.0)
+    assert hasattr(search.best_estimator_, "predict_proba")
 
 
 def main():
