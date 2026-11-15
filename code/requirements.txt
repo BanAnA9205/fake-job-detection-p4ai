@@ -1,0 +1,22 @@
+# Core (everything in modules/ except deep_helper.py needs only these).
+# Tested with: Python 3.14.7, numpy 2.5.4, pandas 3.1.1, scipy 1.18.1,
+# scikit-learn 1.9.1, matplotlib 3.11.2, seaborn 0.13.2, joblib 1.6.0.
+# Lower bounds below come from the APIs the code uses, NOT from testing on older versions:
+#   scikit-learn >= 1.3  (LinearSVC dual="auto"); also needs OneHotEncoder sparse_output and
+#                        handle_unknown="infrequent_if_exist", HistGradientBoosting class_weight (all <= 1.3)
+numpy>=1.24
+pandas>=2.0
+scipy>=1.10
+scikit-learn>=1.3
+matplotlib>=3.7
+seaborn>=0.12
+joblib>=1.3
+
+# Notebook (only if you build/run the notebook)
+nbformat>=5.9
+jupyter
+
+# Optional, only for modules/deep_helper.py (run on Colab, not on the laptop).
+# Not installed in the local .venv and never run locally.
+# torch
+# sentence-transformers
