@@ -1,9 +1,9 @@
-"""Build the three project notebooks with nbformat. No data is read, nothing is fitted.
+"""Build the four project notebooks with nbformat. No data is read, nothing is fitted.
 
 Run from the code/ folder (the script resolves its own folder, so cwd does not matter):
     python notebooks/build_notebooks.py
 
-Writes 01_eda_preprocessing, 02_classical_ml and 03_deep_learning (.ipynb), overwriting
+Writes 01_eda_preprocessing, 02_classical_ml, 03_deep_learning and 04_analysis (.ipynb), overwriting
 existing copies, then re-reads each file and ast.parse-checks every code cell (magics and
 ! lines ignored). The notebooks are executed separately with jupyter nbconvert. All runs
 happen inside the notebooks; the .py files in modules/ are importable helpers only.
@@ -378,12 +378,12 @@ Part A walks through one seed-0 split with the pipeline from the course slides: 
 baselines, TF-IDF logistic regression with a threshold picked on validation, BM25, a decision
 tree and an MLP, then explanations and error reading. Only training and validation rows
 are used there. Part B runs the tuned experiment for all five split seeds (finished runs are
-reused from `outputs/classical/`, so this is fast unless you delete them), then reads the
-saved results: the test split is scored once per (model, seed) inside the run and only read
-back afterwards.
+reused from `outputs/classical/`, so this is fast unless you delete them); the test split is
+scored once per (model, seed) inside the run. Comparing and plotting the saved results is
+notebook 04.
 
-Run time: about 5 minutes for part A; part B reads saved files in under a minute, or about
-an hour if it has to recompute all 30 runs.
+Run time: about 5 minutes for part A; part B is under a minute when the saved runs exist, or
+about an hour if it has to recompute all 30 runs.
 """),
     ("code", """
 import sys, os; os.chdir(os.path.join(os.getcwd(), "..")) if os.path.basename(os.getcwd()) == "notebooks" else None; sys.path.insert(0, "."); import warnings
@@ -399,7 +399,6 @@ from modules import models as md
 from modules import eval_helper as ev
 from modules import explain_helper as eh
 from sklearn.inspection import permutation_importance
-from modules import results_helper as rh
 from modules import classical_runs as cr
 from sklearn.metrics import ConfusionMatrixDisplay, PrecisionRecallDisplay, precision_recall_curve
 
@@ -410,7 +409,6 @@ SEED = 0
 SEEDS = [0, 1, 2, 3, 4]
 SPLIT_PATH = "splits/seed0.npz"
 OUT_CLASSICAL = "outputs/classical"
-GROUPS = ["classical"]  # notebook 03 adds the deep models to the same comparison
 
 dh.seed_everything(SEED)
 sns.set_theme(style="whitegrid")
@@ -706,12 +704,15 @@ if RUN_CLASSICAL:
 ]
 
 # ---------------------------------------------------------------------------
-# Shared results cells (used by notebooks 02 and 03): read saved files only, fit nothing
+# Notebook 04: analysis of the saved results of notebooks 02 and 03
 # ---------------------------------------------------------------------------
 
-RESULTS = [
+# ---------------------------------------------------------------------------
+# Results cells of notebook 04: read saved files only, fit nothing
+# ---------------------------------------------------------------------------
+
+NB4_RESULTS = [
     ("code", """
-OUT_DEEP = "outputs/deep"
 DIRS = {"classical": OUT_CLASSICAL, "deep": OUT_DEEP}
 
 
@@ -861,14 +862,17 @@ is the fraud base rate, i.e. what random guessing scores.
 """),
     ("code", """
 # One curve per model, rebuilt from the saved test scores, on shared axes.
-fig, ax = plt.subplots(figsize=(6, 5))
+fig, ax = plt.subplots(figsize=(9, 5))
 for name, (s, thr) in seed_runs.items():
     PrecisionRecallDisplay.from_predictions(y_test, s["score_test"], name=name, ax=ax)
 
 # Base rate: what random guessing scores.
 ax.axhline(float(y_test.mean()), linestyle="--", color="grey", label="base rate")
 ax.set_title("Test precision-recall curves (seed 0)")
-ax.legend()
+
+# Legend outside the axes, to the right, so it does not cover the curves.
+ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1), fontsize="small")
+fig.tight_layout()
 plt.show()
 """),
     ("md", """
@@ -974,15 +978,83 @@ else:
 """),
 ]
 
-NB2 = NB2 + [
-    ("md", """
-# Results of the classical runs
 
-Everything below reads the saved files; nothing is fitted. The same section is repeated in
-notebook 03 with the deep models added.
-"""),
-] + RESULTS + [
+NB4_HEAD = [
     ("md", """
+# Analysis of the results (notebook 04)
+
+Notebooks 02 and 03 run the models; this one only reads what they saved in 
+and . Nothing is fitted here. It compares all models on the same five splits:
+headline metrics, validation versus test, generalisation gap, per-seed spread, curves and
+confusion matrices of seed 0, the training curves of the fine-tuned model, and which frauds
+each model catches or misses.
+
+Run time: under a minute.
+"""),
+    ("code", """
+import sys, os; os.chdir(os.path.join(os.getcwd(), "..")) if os.path.basename(os.getcwd()) == "notebooks" else None; sys.path.insert(0, "."); import warnings
+import glob, json
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.metrics import ConfusionMatrixDisplay, PrecisionRecallDisplay
+
+from modules import data_helper as dh
+from modules import features as ft
+from modules import results_helper as rh
+
+DATA = "../data/fake_job_postings.csv"
+"""),
+    ("code", """
+SEED = 0
+SPLIT_PATH = "splits/seed0.npz"
+OUT_CLASSICAL = "outputs/classical"
+OUT_DEEP = "outputs/deep"
+GROUPS = ["classical", "deep"]
+
+dh.seed_everything(SEED)
+sns.set_theme(style="whitegrid")
+"""),
+]
+
+NB4 = NB4_HEAD + NB4_RESULTS + [
+    ("md", """
+## Training curves of the fine-tuned model
+
+Session 7: read the curve, not only the end number. Per epoch validation PR-AUC and training
+loss, from the `history` stored with each saved run.
+"""),
+    ("code", """
+import glob, json
+
+# One row per (seed, epoch) from the history stored in each saved fine-tuning run.
+rows = []
+for path in sorted(glob.glob(os.path.join(OUT_DEEP, "bert_*_seed*.json"))):
+    with open(path, encoding="utf-8") as f:
+        rec = json.load(f)
+    for h in rec.get("history", []):
+        rows.append({"seed": rec["seed"], **h})
+hist = pd.DataFrame(rows)
+
+if hist.empty:
+    print("no fine-tuning history found yet")
+else:
+    # Left: validation PR-AUC per epoch. Right: training loss per epoch. One line per seed.
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+    for seed, g in hist.groupby("seed"):
+        axes[0].plot(g["epoch"], g["val_pr_auc"], marker="o", label=f"seed {seed}")
+        axes[1].plot(g["epoch"], g["train_loss"], marker="o", label=f"seed {seed}")
+    axes[0].set_title("Validation PR-AUC per epoch"); axes[0].set_xlabel("epoch"); axes[0].set_ylabel("PR-AUC")
+    axes[1].set_title("Training loss per epoch"); axes[1].set_xlabel("epoch"); axes[1].set_ylabel("weighted cross-entropy")
+    axes[0].legend()
+    plt.show()
+
+    # Time per epoch decides whether to run all five seeds.
+    print("seconds per epoch:", hist["seconds"].round(0).tolist())
+"""),
+("md", """
 ## Findings (classical models)
 
 Numbers are the means over the 5 split seeds in the first table, test split.
@@ -998,10 +1070,30 @@ Numbers are the means over the 5 split seeds in the first table, test split.
 - Caveat: the dataset marks real ads from some countries (for example Greece) as 0%
   fraud, so part of the signal may come from how the data was collected.
 """),
+    ("md", """
+## Findings (deep models)
+
+Numbers are test PR-AUC, means over the 5 split seeds unless stated; DistilBERT has one seed.
+
+- Frozen MiniLM embeddings are clearly worse than TF-IDF: the MLP head reaches 0.63 and the
+  logistic regression head 0.52, against 0.82 to 0.85 for the TF-IDF models. A single 384-number
+  sentence vector loses what the sparse word features keep (a guess, not tested).
+- Fine-tuned DistilBERT (seed 0, 5 epochs, batch 128, texts cut at 256 tokens) scores test
+  PR-AUC 0.798 (validation 0.856). The TF-IDF models have a spread of about 0.06 to 0.08 across
+  seeds, so one seed cannot rank DistilBERT against them; seeds 1 to 4 are needed.
+- The earlier pilot on the same split (3 epochs, batch 16) scored 0.820. The two settings differ
+  by less than the seed spread, so this is not evidence that either is better.
+- Validation PR-AUC rose every epoch (0.61, 0.81, 0.85, 0.85, 0.86) and nearly flattened at
+  the end, so more epochs would add little.
+- Not measured: how many ads exceed 256 tokens, so the truncation cost is unknown.
+"""),
 ]
 
+
+# NB2 ends with the part-B run cell above.
+
 # ---------------------------------------------------------------------------
-# Notebook 03: frozen embeddings and fine-tuned BERT, then the final comparison
+# Notebook 03: frozen embeddings and fine-tuned BERT
 # ---------------------------------------------------------------------------
 
 NB3 = [
@@ -1009,29 +1101,21 @@ NB3 = [
 # Deep learning: frozen embeddings and fine-tuned DistilBERT (notebook 03)
 
 Session 7 order: first freeze a pretrained encoder and train only a small head on its
-embeddings (cheap, cached), then fine-tune the whole encoder (expensive). Both are
-compared with the classical models of notebook 02 on the same five splits, scored once
-on test per (model, seed). Heavy cells need a GPU and the `torch`, `transformers` and
-`sentence-transformers` packages; the run cells are skipped unless `ON_GPU_SERVER = True` (set it on the server only) and the
-notebook only reads saved results from `outputs/deep/`.
+embeddings (cheap, cached), then fine-tune the whole encoder (expensive). Each model is scored
+once on test per (model, seed) on the same five splits as notebook 02; comparing and plotting
+the saved results is notebook 04. Heavy cells need a GPU and the `torch`, `transformers` and
+`sentence-transformers` packages; the run cells are skipped unless `ON_GPU_SERVER = True`
+(set it on the server only).
 
-Run time: roughly one hour on one GPU for all seeds (an estimate, not measured); under a
-minute when it only reads saved results.
+Run time: one DistilBERT run took about 7 minutes on one GPU at batch size 128 (measured, seed 0,
+5 epochs); the embedding heads take seconds once the embeddings are cached.
 """),
     ("code", """
 import sys, os; os.chdir(os.path.join(os.getcwd(), "..")) if os.path.basename(os.getcwd()) == "notebooks" else None; sys.path.insert(0, "."); import warnings
 import importlib.util
 
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-from sklearn.metrics import ConfusionMatrixDisplay, PrecisionRecallDisplay, precision_recall_curve
-
 from modules import data_helper as dh
 from modules import features as ft
-from modules import eval_helper as ev
-from modules import results_helper as rh
 from modules import deep_runs as dr
 
 DATA = "../data/fake_job_postings.csv"
@@ -1039,16 +1123,14 @@ DATA = "../data/fake_job_postings.csv"
     ("code", """
 SEED = 0
 SEEDS = [0, 1, 2, 3, 4]
-BERT_SEEDS = [0]  # pilot first: read the seconds per epoch below, then set it to SEEDS
-SPLIT_PATH = "splits/seed0.npz"
-OUT_CLASSICAL = "outputs/classical"
+BERT_SEEDS = SEEDS  # seeds with existing result files are skipped
 OUT_DEEP = "outputs/deep"
-GROUPS = ["classical", "deep"]
 
 EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 BERT_MODEL = "distilbert-base-uncased"
-EPOCHS, BATCH_SIZE, MAX_LEN, LR = 3, 16, 256, 2e-5
-DEVICE = "cuda:0"  # which GPU to use; the server is shared, so pick an emptier one (nvidia-smi), e.g. "cuda:1"
+EPOCHS, BATCH_SIZE, MAX_LEN, LR = 5, 128, 256, 2e-5
+LOG_EVERY = 10  # print the loss every this many steps
+DEVICE = "cuda:1"  # which GPU to use; the server is shared, so pick an emptier one (nvidia-smi), e.g. "cuda:1"
 
 # SAFETY: the embedding and fine-tuning cells are heavy GPU work. They run only when this flag is
 # True, and it must stay False on the laptop. Set it to True on the GPU server, nowhere else.
@@ -1065,7 +1147,6 @@ RUN_HEADS = RUN_EMBED or HAVE_EMBEDDINGS
 print({"ON_GPU_SERVER": ON_GPU_SERVER, "torch stack": HAVE_TORCH, "cached embeddings": HAVE_EMBEDDINGS})
 
 dh.seed_everything(SEED)
-sns.set_theme(style="whitegrid")
 """),
     ("md", """
 ## Data and splits
@@ -1110,71 +1191,23 @@ else:
 The whole encoder is trained with a linear classification layer on top: AdamW, learning rate
 2e-5 with warm-up and linear decay, square-root class weights in the loss, bf16 autocast on
 CUDA, and early stopping on validation PR-AUC (the best epoch's weights are restored). Texts
-are truncated to 256 tokens. `BERT_SEEDS` starts as one seed so the epoch time can be read
-before committing to all five.
+are truncated to 256 tokens. `BERT_SEEDS` lists the seeds to fine-tune; finished ones are skipped
 """),
     ("code", """
 if RUN_BERT:
     dr.run_bert(df, BERT_SEEDS, OUT_DEEP, DEVICE, BERT_MODEL, epochs=EPOCHS,
-                batch_size=BATCH_SIZE, max_len=MAX_LEN, lr=LR)
+                batch_size=BATCH_SIZE, max_len=MAX_LEN, lr=LR, log_every=LOG_EVERY)
 else:
     print("skipped: set ON_GPU_SERVER = True (GPU server only) and install torch + transformers")
 """),
-    ("md", """
-## Training curves of the fine-tuned model
-
-Session 7: read the curve, not only the end number. Per epoch validation PR-AUC and training
-loss, from the `history` stored with each saved run.
-"""),
-    ("code", """
-import glob, json
-
-# One row per (seed, epoch) from the history stored in each saved fine-tuning run.
-rows = []
-for path in sorted(glob.glob(os.path.join(OUT_DEEP, "bert_*_seed*.json"))):
-    with open(path, encoding="utf-8") as f:
-        rec = json.load(f)
-    for h in rec.get("history", []):
-        rows.append({"seed": rec["seed"], **h})
-hist = pd.DataFrame(rows)
-
-if hist.empty:
-    print("no fine-tuning history found yet")
-else:
-    # Left: validation PR-AUC per epoch. Right: training loss per epoch. One line per seed.
-    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
-    for seed, g in hist.groupby("seed"):
-        axes[0].plot(g["epoch"], g["val_pr_auc"], marker="o", label=f"seed {seed}")
-        axes[1].plot(g["epoch"], g["train_loss"], marker="o", label=f"seed {seed}")
-    axes[0].set_title("Validation PR-AUC per epoch"); axes[0].set_xlabel("epoch"); axes[0].set_ylabel("PR-AUC")
-    axes[1].set_title("Training loss per epoch"); axes[1].set_xlabel("epoch"); axes[1].set_ylabel("weighted cross-entropy")
-    axes[0].legend()
-    plt.show()
-
-    # Time per epoch decides whether to run all five seeds.
-    print("seconds per epoch:", hist["seconds"].round(0).tolist())
-"""),
-    ("md", """
-# Final comparison: classical and deep models together
-
-The remaining sections read the saved files of every model found in `outputs/classical/` and
-`outputs/deep/`. Nothing is fitted below.
-"""),
-] + RESULTS + [
-    ("md", """
-## Findings (deep models)
-
-To be written after the full deep runs have been read; the numbers in the tables above are
-the source of truth until then.
-"""),
 ]
 
-
 def main():
-    """Write the three notebooks, then re-read and parse-check them."""
+    """Write the four notebooks, then re-read and parse-check them."""
     for cells, name in ((NB1, "01_eda_preprocessing.ipynb"),
                         (NB2, "02_classical_ml.ipynb"),
-                        (NB3, "03_deep_learning.ipynb")):
+                        (NB3, "03_deep_learning.ipynb"),
+                        (NB4, "04_analysis.ipynb")):
         path = build(cells, name)
         total, n_code = check(path)
         print(f"{path}: {total} cells ({n_code} code, {total - n_code} markdown)")
