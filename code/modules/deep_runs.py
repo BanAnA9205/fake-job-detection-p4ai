@@ -13,6 +13,7 @@ import numpy as np
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import average_precision_score
 from sklearn.neural_network import MLPClassifier
+from sklearn.utils.class_weight import compute_class_weight
 
 from modules import data_helper as dh
 from modules import deep_helper
@@ -193,11 +194,15 @@ def run_bert(df, seeds, out_dir, device, bert_model=BERT_MODEL, epochs=3, batch_
         val_loader = fth.make_loader(enc_va, y[va], batch_size, False, seed)
         test_loader = fth.make_loader(enc_te, y[te], batch_size, False, seed)
 
+        # Class weights: sklearn's "balanced" weights, square-rooted so the loss is only
+        # mildly tilted towards fraud (the threshold is tuned on validation anyway).
+        balanced = compute_class_weight("balanced", classes=np.array([0, 1]), y=y[tr])
+
         # Fine-tune; the best epoch on validation PR-AUC is restored.
         print("fine-tuning...", flush=True)
         model, history = fth.fine_tune(
             model, train_loader, val_loader, y[va], device, epochs=epochs, lr=lr,
-            class_weight=fth.class_weights(y[tr], mode="sqrt"), seed=seed,
+            class_weight=np.sqrt(balanced), seed=seed,
         )
 
         # Scores, then metrics at the validation-chosen threshold (test is scored once).

@@ -110,8 +110,11 @@ The target is heavily imbalanced, which drives every later choice of metric and
 threshold (Sessions 6/7).
 """),
     ("code", """
+# Count ads per class.
 counts = df["fraudulent"].value_counts().sort_index()
 print(counts.to_dict())
+
+# Bar chart of the two counts.
 fig, ax = plt.subplots(figsize=(5, 4))
 ax.bar(["real (0)", "fraud (1)"], counts.values, color=["tab:blue", "tab:red"])
 ax.set_title("Class balance of the target")
@@ -130,10 +133,13 @@ Share of ads missing each column, real versus fraud. A gap between the two bars 
 a pair means missingness itself is informative.
 """),
     ("code", """
+# Share of missing values per column, one column per class, sorted by the real-ad share.
 by_class = pd.DataFrame({
     "real": df.loc[df["fraudulent"] == 0].isna().mean(),
     "fraud": df.loc[df["fraudulent"] == 1].isna().mean(),
 }).sort_values("real", ascending=False)
+
+# Side-by-side bars: real on the left of each pair, fraud on the right.
 fig, ax = plt.subplots(figsize=(10, 4))
 x = np.arange(len(by_class))
 ax.bar(x - 0.2, by_class["real"], 0.4, label="real")
@@ -156,14 +162,18 @@ can carry the same description text. If copies end up on both sides of a split,
 evaluation leaks.
 """),
     ("code", """
+# Duplicate statistics from the audit.
 print("exact duplicate rows (ignoring job_id):", a["n_duplicate_rows"])
 print("rows sharing their description with another row:", a["n_rows_shared_description"])
 print("duplicate blocks with conflicting labels:", a["n_conflicting_duplicate_groups"])
-# Same normalisation as modules/data_helper: lowercase, collapse whitespace.
+
+# Group ads by identical (normalised) description: lowercase, collapse whitespace.
 desc = (df["description"].fillna("").astype(str).str.lower()
         .str.replace(r"\\s+", " ", regex=True).str.strip())
 sizes = desc.value_counts()
 print("largest description group:", int(sizes.max()), "ads")
+
+# Histogram of group sizes on a log y axis.
 fig, ax = plt.subplots(figsize=(7, 4))
 ax.hist(sizes.values, bins=np.arange(0.5, sizes.max() + 1.5, 1))
 ax.set_yscale("log")
@@ -183,9 +193,12 @@ Long versus short ads. The x axis is log-scaled because lengths span several ord
 of magnitude.
 """),
     ("code", """
+# Description lengths (non-empty only) and log-spaced bins to match the log x axis.
 lens = df["description"].fillna("").str.len()
 lens = lens[lens > 0]
 bins = np.logspace(np.log10(lens.min()), np.log10(lens.max()), 40)
+
+# Overlaid density histograms, one per class.
 fig, ax = plt.subplots(figsize=(7, 4))
 ax.hist(lens[df["fraudulent"] == 0], bins=bins, alpha=0.5, density=True, label="real")
 ax.hist(lens[df["fraudulent"] == 1], bins=bins, alpha=0.5, density=True, label="fraud")
@@ -209,6 +222,7 @@ real URLs, emails and phone numbers with placeholders such as `#URL_ab12cd#`, so
 flags look for those placeholders (plus a few plain-text patterns).
 """),
     ("code", """
+# Engineer the features, then the share of ads firing each binary flag, per class.
 feats = ft.add_engineered_features(df)
 flags = pd.DataFrame({
     "real": feats.loc[feats["fraudulent"] == 0, ft.BINARY_COLS].mean(),
@@ -232,6 +246,7 @@ def fraud_rate(col, y, min_n=100):
     t = pd.DataFrame({"value": col, "fraud": y}).groupby("value")["fraud"]
     t = t.agg(n="count", fraud_rate="mean")
     return t[t["n"] >= min_n].sort_values("fraud_rate", ascending=False)
+
 
 fraud_rate(feats["country"], feats["fraudulent"])
 """),
@@ -278,18 +293,26 @@ fingerprint of the cleaned data; every notebook and every machine reloads exactl
 """),
     ("code", """
 y = dfe["fraudulent"].to_numpy()
+
+# One row per (seed, split): size and fraud count.
 rows = []
 for seed in SEEDS:
     splits = get_splits(dfe, seed)  # loads splits/seed<N>.npz, creating it the first time
     for name, idx in splits.items():
         rows.append({"seed": seed, "split": name, "rows": len(idx),
                      "fraud": int(y[idx].sum()), "fraud rate": round(float(y[idx].mean()), 4)})
+
+# Pivot to one line per seed.
 pd.DataFrame(rows).pivot(index="seed", columns="split", values=["rows", "fraud"])
 """),
     ("code", """
 for seed in SEEDS:
     splits = get_splits(dfe, seed)
+
+    # Description groups present in each split.
     groups = {name: set(dfe["group"].iloc[idx]) for name, idx in splits.items()}
+
+    # No group may appear in two splits (otherwise copies of an ad leak across the split).
     for a_name, b_name in (("train", "val"), ("train", "test"), ("val", "test")):
         shared = groups[a_name] & groups[b_name]
         assert not shared, f"seed {seed}: {len(shared)} groups shared by {a_name} and {b_name}"
@@ -304,11 +327,15 @@ is fitted on the training rows only and then applied to validation and test.
 """),
     ("code", """
 split0 = get_splits(dfe, SEED)
+
+# Fit on the training rows only, then transform validation with the fitted vocabulary and scales.
 pre = ft.make_preprocessor("tfidf")
 X_train = pre.fit_transform(dfe.iloc[split0["train"]])
 X_val = pre.transform(dfe.iloc[split0["val"]])
 names = pre.get_feature_names_out()
 print("train matrix:", X_train.shape, "| validation matrix:", X_val.shape)
+
+# Columns contributed by each block of the ColumnTransformer.
 pd.Series([n.split("__")[0] for n in names]).value_counts().rename("columns per block").to_frame()
 """),
     ("md", """
@@ -371,9 +398,10 @@ from modules import features as ft
 from modules import models as md
 from modules import eval_helper as ev
 from modules import explain_helper as eh
+from sklearn.inspection import permutation_importance
 from modules import results_helper as rh
 from modules import classical_runs as cr
-from sklearn.metrics import confusion_matrix, precision_recall_curve
+from sklearn.metrics import ConfusionMatrixDisplay, PrecisionRecallDisplay, precision_recall_curve
 
 DATA = "../data/fake_job_postings.csv"
 """),
@@ -396,13 +424,18 @@ Load, clean, add features, and reuse the saved seed-0 split (Session 5: split
 first, then fit on the training rows only).
 """),
     ("code", """
+# Load, clean (drop duplicates), add features.
 df = ft.add_engineered_features(dh.clean(dh.load_raw(DATA)))
+
+# Reuse the saved split, or create and save it the first time.
 if os.path.exists(SPLIT_PATH):
     splits = dh.load_splits(SPLIT_PATH, df)
 else:
     splits = dh.make_splits(df, seed=SEED)
     dh.save_splits(SPLIT_PATH, splits, df)
 assert not set(splits["train"]) & set(splits["val"]), "train/val row overlap"
+
+# Frames and labels for the two splits this notebook uses (test stays untouched).
 train = df.iloc[splits["train"]]
 val = df.iloc[splits["val"]]
 y_train = train["fraudulent"].to_numpy()
@@ -425,15 +458,22 @@ generalisation gap is visible (Session 6). `ev.compare_table` names its second s
 rows are never touched.
 """),
     ("code", """
+# Everything the later cells need, keyed by model name.
 fitted, thresholds, scores, results = {}, {}, {}, {}
+
 
 def report(name, model):
     \"\"\"Score a fitted model; the threshold is picked on validation only.\"\"\"
+    # Validation scores, then the threshold chosen on them.
     s_val = ev.score_of(model, val)
     thr = ev.pick_threshold(y_val, s_val)
+
+    # Train and validation metrics at that threshold, stored for the comparison table.
     results[name] = {"train": ev.evaluate(y_train, ev.score_of(model, train), thr),
                      "test": ev.evaluate(y_val, s_val, thr)}
     fitted[name], thresholds[name], scores[name] = model, thr, s_val
+
+    # One small table for display.
     out = pd.DataFrame(results[name]).T.rename(index={"test": "val"})  # "test" slot holds validation
     out = out[["pr_auc", "roc_auc", "f1", "precision", "recall"]]
     out.insert(0, "model", name)
@@ -464,10 +504,11 @@ report("logreg", md.get_models(SEED)["logreg"].fit(train, y_train))
 ### Confusion matrix on validation
 """),
     ("code", """
-m = results["logreg"]["test"]  # validation metrics (see the helper above)
-cm = np.array([[m["tn"], m["fp"]], [m["fn"], m["tp"]]])
-ev.plot_confusions({"logreg": cm}, ["real", "fraud"],
-                   title="Validation confusion matrix (logreg)")
+# Hard predictions at the validation-chosen threshold, drawn with sklearn's display.
+pred_val = (scores["logreg"] >= thresholds["logreg"]).astype(int)
+ConfusionMatrixDisplay.from_predictions(y_val, pred_val, display_labels=["real", "fraud"],
+                                        colorbar=False)
+plt.title("Validation confusion matrix (logreg)")
 plt.show()
 """),
     ("md", """
@@ -481,10 +522,13 @@ Session 6: with an imbalanced target there is no free lunch between precision an
 recall; the threshold is a business decision, and we pick it on validation.
 """),
     ("code", """
-sw = ev.sweep_thresholds(y_val, scores["logreg"])
+# Precision and recall at every distinct score (the last point has no threshold).
+prec, rec, thr_grid = precision_recall_curve(y_val, scores["logreg"])
+
+# Two curves plus the threshold that was actually chosen.
 fig, ax = plt.subplots(figsize=(7, 4))
-ax.plot(sw["threshold"], sw["precision"], label="precision")
-ax.plot(sw["threshold"], sw["recall"], label="recall")
+ax.plot(thr_grid, prec[:-1], label="precision")
+ax.plot(thr_grid, rec[:-1], label="recall")
 ax.axvline(thresholds["logreg"], color="grey", linestyle="--", label="chosen threshold")
 ax.set_xlabel("threshold on the fraud score")
 ax.set_ylabel("metric value")
@@ -568,7 +612,10 @@ Session 6: read the model. `top_linear_terms` maps the coefficients back to feat
 names recovered from the fitted ColumnTransformer.
 """),
     ("code", """
+# The 15 strongest terms on each side, sorted so the bars read from blue to red.
 terms = eh.top_linear_terms(fitted["logreg"], k=15).sort_values("coef")
+
+# Horizontal bars: red pushes towards fraud, blue towards real.
 fig, ax = plt.subplots(figsize=(8, 7))
 ax.barh(terms["term"], terms["coef"],
         color=np.where(terms["coef"] > 0, "tab:red", "tab:blue"))
@@ -588,13 +635,16 @@ Shuffle one raw input column at a time and see how much validation PR-AUC drops
 quick.
 """),
     ("code", """
+# Small validation sample and one repeat keep this quick. sklearn shuffles each raw column
+# of the frame in turn and measures the drop in PR-AUC of the whole fitted pipeline.
 val_sample = val.sample(min(1000, len(val)), random_state=SEED)
-perm = eh.permutation_table(fitted["logreg"], val_sample,
-                            val_sample["fraudulent"].to_numpy(),
-                            n_repeats=1, seed=SEED)
-top = perm.head(10).iloc[::-1]  # reversed so the biggest bar lands on top
+perm = permutation_importance(fitted["logreg"], val_sample, val_sample["fraudulent"].to_numpy(),
+                              scoring="average_precision", n_repeats=1, random_state=SEED)
+
+# Top 10 columns as a bar chart.
+top = pd.Series(perm.importances_mean, index=val_sample.columns).nlargest(10).iloc[::-1]
 fig, ax = plt.subplots(figsize=(7, 5))
-ax.barh(top["col"], top["importance_mean"])
+ax.barh(top.index, top.values)
 ax.set_xlabel("drop in validation PR-AUC when the column is shuffled")
 ax.set_title("Permutation importance (validation sample, 1 repeat)")
 plt.show()
@@ -622,8 +672,18 @@ Session 6: a model can look fine on average and still fail one group. Recall and
 precision by employment type at the logreg's validation threshold.
 """),
     ("code", """
+# One row per prediction, then counts per employment type (missing is its own group).
 pred_val = (scores["logreg"] >= thresholds["logreg"]).astype(int)
-ev.group_breakdown(y_val, pred_val, val["employment_type"])
+g = pd.DataFrame({"group": val["employment_type"].fillna("missing").to_numpy(),
+                  "y": y_val, "pred": pred_val})
+g["tp"] = g["y"] & g["pred"]
+tab = g.groupby("group").agg(count=("y", "size"), positives=("y", "sum"),
+                             flagged=("pred", "sum"), tp=("tp", "sum"))
+
+# Recall = caught frauds / all frauds; precision = caught frauds / flagged ads.
+tab["recall"] = tab["tp"] / tab["positives"]
+tab["precision"] = tab["tp"] / tab["flagged"]
+tab[["count", "positives", "recall", "precision"]]
 """),
     ("md", """
 Reading: rows with few ads have noisy recall and precision; the count column says
@@ -669,7 +729,10 @@ files of the groups listed in `GROUPS` (deep results only when `outputs/deep/` i
 nothing is found we stop here with a message instead of crashing.
 """),
     ("code", """
+# Result folders of the wanted groups that exist and are not empty.
 dirs = [d for g, d in DIRS.items() if g in GROUPS and os.path.isdir(d) and os.listdir(d)]
+
+# One row per (model, seed) from the saved json files.
 res = rh.load_results(*dirs) if dirs else pd.DataFrame(columns=["group"])
 res = res[res["group"].isin(GROUPS)]
 if res.empty:
@@ -701,7 +764,11 @@ def fmt(col):
     return [f"{m:.3f} +- {s:.3f}" if pd.notna(s) else f"{m:.3f}"
             for m, s in zip(g.mean(), g.std())]
 
+
+# Models ordered by mean test PR-AUC, best first.
 order = res.groupby("model")["test_pr_auc"].mean().sort_values(ascending=False).index
+
+# The headline table: mean +- std over seeds.
 pd.DataFrame({
     "seeds": res.groupby("model").size(),
     "test PR-AUC": fmt("test_pr_auc"),
@@ -722,6 +789,7 @@ Validation is what models, hyper-parameters and thresholds were chosen on; test 
 the honest number. The difference is the price of that selection.
 """),
     ("code", """
+# Mean validation and test PR-AUC per model, then grouped bars.
 means = res.groupby("model")[["val_pr_auc", "test_pr_auc"]].mean().loc[order]
 ax = means.plot(kind="bar", figsize=(9, 4))
 ax.set_title("PR-AUC on validation vs test (mean over seeds)")
@@ -752,6 +820,7 @@ Session 7 rule of thumb: a model that wins by less than its own standard deviati
 has not won. Each point is one split seed.
 """),
     ("code", """
+# One point per (model, seed).
 fig, ax = plt.subplots(figsize=(9, 4))
 sns.stripplot(data=res, x="model", y="test_pr_auc", order=order, ax=ax, size=6)
 ax.set_title("Test PR-AUC per split seed")
@@ -772,10 +841,13 @@ split, so curves and matrices can be rebuilt without refitting anything. If no
 seed-0 run exists we stop with a message.
 """),
     ("code", """
+# Stop quietly when there is no seed-0 run.
 seed0 = res[res["seed"] == 0]
 if seed0.empty:
     print("No seed-0 runs found; the remaining sections need seed 0.")
     raise StopExecution
+
+# Saved scores and threshold of every seed-0 model; y_test is the same for all of them.
 seed_runs = {row["model"]: (rh.load_scores(DIRS[row["group"]], row["model"], 0), row["thr"])
              for _, row in seed0.iterrows()}
 y_test = next(iter(seed_runs.values()))[0]["y_test"]
@@ -788,11 +860,15 @@ Built from the saved scores with sklearn's `precision_recall_curve`; the dashed 
 is the fraud base rate, i.e. what random guessing scores.
 """),
     ("code", """
-curves = {name: precision_recall_curve(y_test, s["score_test"])[:2]
-          for name, (s, thr) in seed_runs.items()}
-pos_rate = float(y_test.mean())
-ev.plot_pr_curves(curves, pos_rate=pos_rate,
-                  title="Test precision-recall curves (seed 0)")
+# One curve per model, rebuilt from the saved test scores, on shared axes.
+fig, ax = plt.subplots(figsize=(6, 5))
+for name, (s, thr) in seed_runs.items():
+    PrecisionRecallDisplay.from_predictions(y_test, s["score_test"], name=name, ax=ax)
+
+# Base rate: what random guessing scores.
+ax.axhline(float(y_test.mean()), linestyle="--", color="grey", label="base rate")
+ax.set_title("Test precision-recall curves (seed 0)")
+ax.legend()
 plt.show()
 """),
     ("md", """
@@ -803,12 +879,23 @@ is better, and the dashed grey line is the base rate every curve should beat.
 ### Confusion matrices at the validation-chosen threshold (seed 0)
 """),
     ("code", """
-cms = {}
-for name, (s, thr) in seed_runs.items():
+# Grid of panels, 3 per row, one per model.
+n_cols = 3
+n_rows = -(-len(seed_runs) // n_cols)
+fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3.5 * n_rows), squeeze=False)
+
+# Hard predictions at each model's own validation-chosen threshold.
+for ax, (name, (s, thr)) in zip(axes.ravel(), seed_runs.items()):
     pred = (s["score_test"] >= thr).astype(int)
-    cms[name] = confusion_matrix(y_test, pred)
-ev.plot_confusions(cms, ["real", "fraud"],
-                   title="Test confusion matrices, validation-chosen threshold (seed 0)")
+    ConfusionMatrixDisplay.from_predictions(y_test, pred, display_labels=["real", "fraud"],
+                                            colorbar=False, ax=ax)
+    ax.set_title(name)
+
+# Hide unused panels.
+for ax in axes.ravel()[len(seed_runs):]:
+    ax.set_visible(False)
+fig.suptitle("Test confusion matrices, validation-chosen threshold (seed 0)")
+fig.tight_layout()
 plt.show()
 """),
     ("md", """
@@ -832,15 +919,20 @@ model A catch that model B misses. Plus the frauds caught by at least one model 
 not by all.
 """),
     ("code", """
+# Which test frauds each model catches at its own threshold.
 fraud_idx = np.where(y_test == 1)[0]
 # The dummies are left out: at their threshold they flag every ad, so they "catch" every fraud.
 caught = {name: frozenset(fraud_idx[s["score_test"][fraud_idx] >= thr])
           for name, (s, thr) in seed_runs.items() if not name.startswith("dummy")}
+
+# Pairwise matrix: frauds caught by the row model but missed by the column model.
 names = list(caught)
 overlap = pd.DataFrame(0, index=names, columns=names)
 for a in names:
     for b in names:
         overlap.loc[a, b] = len(caught[a] - caught[b])
+
+# Frauds caught by at least one model but not by all (union minus intersection).
 union = set().union(*caught.values())
 inter = set(fraud_idx)
 for c in caught.values():
@@ -864,12 +956,17 @@ split file to look the rows up.
 if not os.path.exists(SPLIT_PATH):
     print("splits/seed0.npz not found; cannot look up the missed ads.")
 else:
+    # The seed-0 test rows, in the same order as the saved scores.
     df = ft.add_engineered_features(dh.clean(dh.load_raw(DATA)))
     test = df.iloc[dh.load_splits(SPLIT_PATH, df)["test"]]
+
+    # Ads flagged by at least one real model at its own threshold.
     caught_any = np.zeros(len(test), dtype=bool)
     for name, (s, thr) in seed_runs.items():
         if not name.startswith("dummy"):      # dummies flag every ad, so they would hide all misses
             caught_any |= (s["score_test"] >= thr)
+
+    # The frauds nobody caught, printed for reading.
     missed = test[(y_test == 1) & ~caught_any]
     print(len(missed), "test frauds that no model caught:")
     for _, r in missed.iterrows():
@@ -929,7 +1026,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.metrics import confusion_matrix, precision_recall_curve
+from sklearn.metrics import ConfusionMatrixDisplay, PrecisionRecallDisplay, precision_recall_curve
 
 from modules import data_helper as dh
 from modules import features as ft
@@ -983,8 +1080,11 @@ cell is a no-op the second time.
 """),
     ("code", """
 if RUN_EMBED:
+    # Report the GPU and batch settings before the heavy work starts.
     device = dr.resolve_device("auto")
     dr.print_run_info(device, BATCH_SIZE, MAX_LEN)
+
+    # Encode every ad once; the result is cached in features/.
     dr.run_embed(df, device, EMBED_MODEL)
 else:
     print("skipped: needs a GPU and torch + sentence-transformers")
@@ -1026,6 +1126,8 @@ loss, from the `history` stored with each saved run.
 """),
     ("code", """
 import glob, json
+
+# One row per (seed, epoch) from the history stored in each saved fine-tuning run.
 rows = []
 for path in sorted(glob.glob(os.path.join(OUT_DEEP, "bert_*_seed*.json"))):
     with open(path, encoding="utf-8") as f:
@@ -1033,9 +1135,11 @@ for path in sorted(glob.glob(os.path.join(OUT_DEEP, "bert_*_seed*.json"))):
     for h in rec.get("history", []):
         rows.append({"seed": rec["seed"], **h})
 hist = pd.DataFrame(rows)
+
 if hist.empty:
     print("no fine-tuning history found yet")
 else:
+    # Left: validation PR-AUC per epoch. Right: training loss per epoch. One line per seed.
     fig, axes = plt.subplots(1, 2, figsize=(10, 4))
     for seed, g in hist.groupby("seed"):
         axes[0].plot(g["epoch"], g["val_pr_auc"], marker="o", label=f"seed {seed}")
@@ -1044,6 +1148,8 @@ else:
     axes[1].set_title("Training loss per epoch"); axes[1].set_xlabel("epoch"); axes[1].set_ylabel("weighted cross-entropy")
     axes[0].legend()
     plt.show()
+
+    # Time per epoch decides whether to run all five seeds.
     print("seconds per epoch:", hist["seconds"].round(0).tolist())
 """),
     ("md", """

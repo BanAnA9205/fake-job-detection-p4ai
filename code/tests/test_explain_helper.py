@@ -19,7 +19,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 
 from sklearn.tree import DecisionTreeClassifier
 
-from modules.explain_helper import (permutation_table, show_errors, top_linear_terms,
+from modules.explain_helper import (show_errors, top_linear_terms,
                                     top_tree_features, tree_rules)
 
 
@@ -89,23 +89,6 @@ def test_top_linear_terms_rejects_nonlinear():
     assert raised
 
 
-def test_permutation_table():
-    df = _make_data()
-    X = df[["description", "cat"]]
-    pipe = _make_pipe().fit(X, df["y"])
-    tab = permutation_table(pipe, X, df["y"], n_repeats=2, seed=0)
-    assert set(tab.columns) == {"col", "importance_mean", "importance_std"}
-    assert set(tab["col"]) == {"description", "cat"}
-    # The text column carries all signal, the noise column none.
-    desc = tab[tab["col"] == "description"].iloc[0]
-    cat = tab[tab["col"] == "cat"].iloc[0]
-    assert desc["importance_mean"] > cat["importance_mean"]
-    assert desc["importance_mean"] > 0
-    # Column filter returns the subset only.
-    only_cat = permutation_table(pipe, X, df["y"], n_repeats=2, cols=["cat"])
-    assert set(only_cat["col"]) == {"cat"}
-    # Sorted descending by importance.
-    assert (np.diff(tab["importance_mean"].to_numpy()) <= 1e-12).all()
 
 
 def test_show_errors():

@@ -19,7 +19,6 @@ import torch
 from transformers import BertConfig, BertForSequenceClassification, BertTokenizerFast
 
 from modules.finetune_helper import (
-    class_weights,
     encode_texts,
     fine_tune,
     make_loader,
@@ -83,16 +82,6 @@ def keyword_rows(n=32):
     return texts, np.array(labels, dtype=int)
 
 
-def test_class_weights():
-    """Known answers for the three modes on 8 negatives and 2 positives."""
-    y = np.array([0] * 8 + [1] * 2)
-    assert isinstance(class_weights(y, "sqrt"), torch.Tensor)
-    sqrt_w = class_weights(y, "sqrt")
-    assert sqrt_w.shape == (2,), "one weight per class expected"
-    assert float(sqrt_w[0]) == 1.0, "the negative class keeps weight 1"
-    assert abs(float(sqrt_w[1]) - np.sqrt(4.0)) < 1e-6
-    assert abs(float(class_weights(y, "balanced")[1]) - 4.0) < 1e-6
-    assert float(class_weights(y, "none")[1]) == 1.0
 
 
 def test_encode_texts_shapes():
@@ -144,7 +133,7 @@ def test_fine_tune_and_predict():
 
     model, history = fine_tune(
         model, train_loader, val_loader, y_va, "cpu", epochs=2, lr=1e-3,
-        class_weight=class_weights(y_tr, mode="sqrt"), seed=0,
+        class_weight=np.array([1.0, 2.0]), seed=0,
     )
     snapshots = list(model.snapshots)  # copy now: predict_proba below adds another snapshot
 
@@ -174,7 +163,6 @@ def test_fine_tune_and_predict():
 
 
 if __name__ == "__main__":
-    test_class_weights()
     test_encode_texts_shapes()
     test_make_loader_order()
     test_fine_tune_and_predict()

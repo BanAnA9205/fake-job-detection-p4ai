@@ -1,8 +1,7 @@
-"""Explanation helpers: linear coefficients, permutation importance, error reading."""
+"""Explanation helpers: linear coefficients, tree importances and rules, error reading."""
 
 import numpy as np
 import pandas as pd
-from sklearn.inspection import permutation_importance
 from sklearn.tree import export_text
 
 
@@ -35,44 +34,6 @@ def top_linear_terms(pipe, k=20):
     )
 
     return pd.concat([pos, neg], ignore_index=True)
-
-
-def permutation_table(
-    pipe, X, y, scoring="average_precision", n_repeats=5, seed=0, n_jobs=1, cols=None
-):
-    """Permutation importance on the RAW input columns of the dataframe.
-
-    Permutation importance shuffles one raw input column at a time and measures
-    how much the score drops; the bigger the drop, the more the model relied on
-    that column. Shuffling raw (not transformed) columns keeps the result easy
-    to explain.
-    """
-    n_jobs = max(1, min(int(n_jobs), 4))  # safety cap from the project spec
-
-    # Shuffle each raw column n_repeats times and record the score drop.
-    r = permutation_importance(
-        pipe, X, y, scoring=scoring, n_repeats=n_repeats,
-        random_state=seed, n_jobs=n_jobs,
-    )
-
-    # Tabulate by column name.
-    if hasattr(X, "columns"):
-        col_names = list(X.columns)
-    else:
-        col_names = [f"x{i}" for i in range(r.importances.shape[0])]
-    out = pd.DataFrame(
-        {
-            "col": col_names,
-            "importance_mean": r.importances_mean,
-            "importance_std": r.importances_std,
-        }
-    )
-
-    # We always permute every column (the pipeline needs them all) and only
-    # filter the table afterwards when the caller asks for a subset.
-    if cols is not None:
-        out = out[out["col"].isin(cols)]
-    return out.sort_values("importance_mean", ascending=False).reset_index(drop=True)
 
 
 def show_errors(df, y_true, score, thr, k=10):

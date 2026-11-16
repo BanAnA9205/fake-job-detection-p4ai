@@ -50,34 +50,6 @@ def make_loader(enc, labels, batch_size, shuffle, seed):
     return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, generator=generator)
 
 
-def class_weights(y_train, mode="sqrt"):
-    """Return the CrossEntropyLoss weight tensor [1.0, w] for the positive class.
-
-    With 4.8% positives the plain loss mostly learns "not fraud". sqrt is a mild
-    correction: full balancing over-weights 41 positives per 1 negative, and the
-    decision threshold is chosen on validation anyway, so the loss scale is not
-    critical.
-    """
-    import torch
-
-    y = np.asarray(y_train).astype(int)
-    n_pos = int((y == 1).sum())
-    n_neg = int((y == 0).sum())
-    assert n_pos > 0 and n_neg > 0, "both classes must be present in y_train"
-
-    # Weight of the fraud class relative to the real class (weight 1.0).
-    if mode == "none":
-        weight = 1.0
-    elif mode == "sqrt":
-        weight = float(np.sqrt(n_neg / n_pos))
-    elif mode == "balanced":
-        weight = float(n_neg / n_pos)
-    else:
-        raise ValueError(f"unknown class weight mode: {mode!r}")
-
-    return torch.tensor([1.0, weight], dtype=torch.float32)
-
-
 def _amp(device):
     """bf16 autocast on cuda (roughly half the memory); a no-op context elsewhere."""
     import torch

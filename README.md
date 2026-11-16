@@ -9,9 +9,7 @@ Deep branch: frozen sentence embeddings with LR/MLP heads, and a fine-tuned Dist
 - `code/notebooks/`  01 EDA + preprocessing, 02 classical ML (runs + results), 03 deep learning (runs + final comparison); everything is run from the notebooks
 - `code/modules/classical_runs.py`, `deep_runs.py`  importable run logic called by notebooks 02 and 03
 - `code/splits/`                saved train/val/test indices per seed (identical on every machine)
-- `code/notebooks/`             01 EDA, 02 classical demo, 03 results (executed, outputs saved)
 - `code/tests/`                 plain-assert tests on synthetic data (run as scripts)
-- `code/*_SPEC.md`              the contracts the modules were written against
 - `docs/`                       assignment spec and the literature review draft
 
 Setup: `python -m venv .venv && .venv/bin/pip install -r code/requirements.txt`, then run tests with
