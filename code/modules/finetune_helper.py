@@ -78,7 +78,7 @@ def predict_proba(model, loader, device):
     return np.concatenate(probs) if probs else np.zeros(0, dtype=np.float32)
 
 
-def _train_epoch(model, loader, criterion, opt, sched, device):
+def _train_epoch(model, loader, criterion, opt, sched, device, log_every = 100):
     """One pass over the training loader; returns the sample-weighted mean loss."""
     import torch
 
@@ -105,7 +105,7 @@ def _train_epoch(model, loader, criterion, opt, sched, device):
         total += loss.item() * len(labels)
 
         # Progress line, so a long epoch does not look like a hang.
-        if step % 100 == 0:
+        if step % log_every == 0:
             print(f"  step {step}/{len(loader)}  loss {loss.item():.4f}", flush=True)
     return total / len(loader.dataset)
 
@@ -121,6 +121,7 @@ def fine_tune(
     weight_decay=0.01,
     class_weight=None,
     seed=0,
+    log_every=100,
 ):
     """Fine-tune with AdamW, warm-up and decay, keeping the best validation PR-AUC weights."""
     import time
@@ -151,7 +152,7 @@ def fine_tune(
     for epoch in range(epochs):
         # Train one epoch, then score validation PR-AUC.
         start = time.time()
-        train_loss = _train_epoch(model, train_loader, criterion, opt, sched, device)
+        train_loss = _train_epoch(model, train_loader, criterion, opt, sched, device, log_every=log_every)
         auc = float(average_precision_score(y_val, predict_proba(model, val_loader, device)))
         history.append({
             "epoch": epoch + 1,

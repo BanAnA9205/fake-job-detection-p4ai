@@ -145,7 +145,7 @@ def run_heads(df, seeds, out_dir, embed_model=EMBED_MODEL):
 
 
 def run_bert(df, seeds, out_dir, device, bert_model=BERT_MODEL, epochs=3, batch_size=16,
-             max_len=256, lr=2e-5):
+             max_len=256, lr=2e-5, log_every=100):
     """Fine-tune the encoder per seed; tokenise once per seed and evaluate test once."""
     y = df[dh.TARGET].to_numpy()
     name = "bert_" + bert_model.replace("/", "_")
@@ -182,7 +182,7 @@ def run_bert(df, seeds, out_dir, device, bert_model=BERT_MODEL, epochs=3, batch_
         print("fine-tuning...", flush=True)
         model, history = fth.fine_tune(
             model, train_loader, val_loader, y[va], device, epochs=epochs, lr=lr,
-            class_weight=np.sqrt(balanced), seed=seed,
+            class_weight=np.sqrt(balanced), seed=seed, log_every=log_every
         )
 
         # Scores, then metrics at the validation-chosen threshold (test is scored once).

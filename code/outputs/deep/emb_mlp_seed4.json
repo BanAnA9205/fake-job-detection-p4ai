@@ -31,6 +31,6 @@
       128
     ]
   },
-  "seconds": 2.949038028717041,
+  "seconds": 2.845705509185791,
   "notes": "frozen embeddings with a sklearn head; threshold on validation"
 }
