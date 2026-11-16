@@ -61,16 +61,21 @@ def load_embeddings(embed_model, job_ids, cache_dir=EMBED_CACHE):
     slug = embed_model.replace("/", "_")
     emb_path = os.path.join(cache_dir, slug + "_emb.npy")
     ids_path = os.path.join(cache_dir, slug + "_ids.npy")
+
+    # The cache must exist...
     if not (os.path.exists(emb_path) and os.path.exists(ids_path)):
-        raise FileNotFoundError(f"no embeddings for {embed_model} in {cache_dir}/; run --stage embed first")
+        raise FileNotFoundError(f"no embeddings for {embed_model} in {cache_dir}/; run the embedding step first")
+
+    # ...and must have been built for exactly these rows, in this order.
     assert np.array_equal(np.load(ids_path, allow_pickle=True), np.asarray(job_ids)), (
-        "cached embeddings belong to different rows; rerun --stage embed"
+        "cached embeddings belong to different rows; rerun the embedding step"
     )
     return np.load(emb_path)
 
 
 def evaluate_scores(y, splits, score_val, score_test):
     """Fix the threshold on validation, then evaluate validation and test at that threshold."""
+    # Threshold from validation only; then both splits are scored with that one number.
     thr = ev.pick_threshold(y[splits["val"]], score_val)
     val_metrics = ev.evaluate(y[splits["val"]], score_val, thr)
     test_metrics = ev.evaluate(y[splits["test"]], score_test, thr)
@@ -91,9 +96,12 @@ def fit_logreg_head(Xtr, ytr, Xva, yva, seed):
     """Logistic regression on embeddings, with C picked by validation PR-AUC."""
     best_auc, best_model, best_params = -np.inf, None, {}
     for C in LOGREG_CS:
+        # Fit on train for this C, score validation PR-AUC.
         model = LogisticRegression(C=C, class_weight="balanced", max_iter=2000, random_state=seed)
         model.fit(Xtr, ytr)
         auc = float(average_precision_score(yva, ev.score_of(model, Xva)))
+
+        # Keep the best C so far.
         if auc > best_auc:
             best_auc, best_model, best_params = auc, model, {"C": C}
     return best_model, best_params
@@ -110,9 +118,13 @@ def fit_mlp_head(Xtr, ytr, seed):
 def save_head_result(out_dir, name, seed, model, params, X, y, splits, start):
     """Score a fitted head, evaluate it, and write the result files."""
     tr, va, te = splits["train"], splits["val"], splits["test"]
+
+    # Scores on validation and test, then metrics at the validation-chosen threshold.
     score_val = ev.score_of(model, X[va])
     score_test = ev.score_of(model, X[te])
     thr, val_metrics, test_metrics = evaluate_scores(y, splits, score_val, score_test)
+
+    # Save the shared json + npz pair and report validation and test PR-AUC.
     rh.save_result(
         out_dir, name, "deep", seed, thr, val_metrics, test_metrics, y[va], score_val,
         y[te], score_test,
@@ -129,15 +141,20 @@ def run_heads(df, seeds, out_dir, embed_model=EMBED_MODEL):
     emb = load_embeddings(embed_model, df["job_id"].to_numpy())
     print(f"embeddings: {emb.shape}")
     for seed in seeds:
+        # The saved split for this seed.
         splits = get_splits(df, seed)
         print_splits(splits, y, seed)
         tr, va = splits["train"], splits["val"]
+
+        # Head 1: logistic regression (skipped when its result files exist).
         if rh.result_exists(out_dir, "emb_logreg", seed):
             print(f"skip emb_logreg seed {seed}: result files already exist")
         else:
             start = time.time()
             model, params = fit_logreg_head(emb[tr], y[tr], emb[va], y[va], seed)
             save_head_result(out_dir, "emb_logreg", seed, model, params, emb, y, splits, start)
+
+        # Head 2: small MLP.
         if rh.result_exists(out_dir, "emb_mlp", seed):
             print(f"skip emb_mlp seed {seed}: result files already exist")
         else:
@@ -152,30 +169,46 @@ def run_bert(df, seeds, out_dir, device, bert_model=BERT_MODEL, epochs=3, batch_
     y = df[dh.TARGET].to_numpy()
     name = "bert_" + bert_model.replace("/", "_")
     for seed in seeds:
+        # Resume support: skip seeds that already have result files.
         if rh.result_exists(out_dir, name, seed):
             print(f"skip {name} seed {seed}: result files already exist")
             continue
+
+        # The saved split for this seed.
         splits = get_splits(df, seed)
         print_splits(splits, y, seed)
         tr, va, te = splits["train"], splits["val"], splits["test"]
+
+        # Fresh pretrained model per seed, and the texts tokenised once per split.
         start = time.time()
+        print(f"loading {bert_model} (downloads on the first run)...", flush=True)
         model, tokenizer = fth.load_model_and_tokenizer(bert_model)
+        print("tokenising...", flush=True)
         enc_tr = fth.encode_texts(tokenizer, df["text"].iloc[tr].tolist(), max_len)
         enc_va = fth.encode_texts(tokenizer, df["text"].iloc[va].tolist(), max_len)
         enc_te = fth.encode_texts(tokenizer, df["text"].iloc[te].tolist(), max_len)
+
+        # Loaders: only the training loader shuffles.
         train_loader = fth.make_loader(enc_tr, y[tr], batch_size, True, seed)
         val_loader = fth.make_loader(enc_va, y[va], batch_size, False, seed)
         test_loader = fth.make_loader(enc_te, y[te], batch_size, False, seed)
+
+        # Fine-tune; the best epoch on validation PR-AUC is restored.
+        print("fine-tuning...", flush=True)
         model, history = fth.fine_tune(
             model, train_loader, val_loader, y[va], device, epochs=epochs, lr=lr,
             class_weight=fth.class_weights(y[tr], mode="sqrt"), seed=seed,
         )
+
+        # Scores, then metrics at the validation-chosen threshold (test is scored once).
         score_val = fth.predict_proba(model, val_loader, device)
         score_test = fth.predict_proba(model, test_loader, device)
         thr, val_metrics, test_metrics = evaluate_scores(y, splits, score_val, score_test)
         # A separate ordered loader keeps the train scores aligned with y_train.
         train_eval_loader = fth.make_loader(enc_tr, y[tr], batch_size, False, seed)
         score_train = fth.predict_proba(model, train_eval_loader, device)
+
+        # Save the shared json + npz pair (with the per-epoch history) and report.
         rh.save_result(
             out_dir, name, "deep", seed, thr, val_metrics, test_metrics, y[va], score_val,
             y[te], score_test,

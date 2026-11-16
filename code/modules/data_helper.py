@@ -21,10 +21,14 @@ BALANCE_TOL = 0.01  # allowed drift of the positive rate between splits
 def load_raw(path):
     """Read the CSV and check the schema the rest of the code relies on."""
     df = pd.read_csv(path)
+
+    # Schema: column count, the target and id exist, every column we use is present.
     assert df.shape[1] == 18, f"expected 18 columns, got {df.shape[1]}"
     assert TARGET in df.columns and "job_id" in df.columns, "missing target or job_id"
     missing = [c for c in TEXT_COLS + CAT_COLS + BIN_COLS if c not in df.columns]
     assert not missing, f"missing columns: {missing}"
+
+    # Values: ids are unique and the label is binary.
     assert df["job_id"].is_unique, "job_id is not unique"
     assert set(df[TARGET].unique()) <= {0, 1}, f"{TARGET} must only contain 0 and 1"
     return df
@@ -76,12 +80,17 @@ def audit(df):
 def clean(df):
     """Drop exact duplicate postings, check labels agree, and tag description groups."""
     cols = _content_cols(df)
+
+    # Duplicates with conflicting labels would make "keep the first" hide a real label error.
     conflicts = _count_duplicate_conflicts(df)
-    # Keeping the first row of a block with two labels would hide a real label error.
     assert conflicts == 0, f"{conflicts} duplicate blocks disagree on {TARGET}; review the data"
+
+    # Drop exact duplicates (ignoring job_id), then tag each row with its description group.
     out = df.drop_duplicates(subset=cols, keep="first").copy()
     out["group"] = out["description"].map(_desc_hash)
     out = out.reset_index(drop=True)
+
+    # Sanity checks on the result.
     assert not out.duplicated(subset=cols).any(), "duplicates survived the drop"
     assert out["group"].notna().all(), "group hash failed"
     return out
@@ -97,12 +106,18 @@ def _require_groups(groups, n_splits):
 def _check_splits(splits, y, groups):
     """Assert splits cover every row once, share no group and stay close in balance."""
     names = list(splits)
+
+    # Coverage: every row appears in exactly one split.
     stacked = np.concatenate([splits[n] for n in names])
     assert np.array_equal(np.sort(stacked), np.arange(len(y))), "splits must cover every row once"
+
+    # No leakage: no description group sits in two splits.
     for i, a in enumerate(names):
         for b in names[i + 1:]:
             shared = set(groups[splits[a]]) & set(groups[splits[b]])
             assert not shared, f"{len(shared)} description groups appear in both {a} and {b}"
+
+    # Balance: each split keeps roughly the overall positive rate.
     overall = float(y.mean())
     for name in names:
         rate = float(y[splits[name]].mean())
@@ -120,15 +135,21 @@ def make_splits(df, seed=0, val_size=0.2, test_size=0.2):
     y = df[TARGET].to_numpy()
     groups = df["group"].to_numpy()
     n = len(df)
+
+    # Step 1: cut the test split off first (1 fold out of 1/test_size folds).
+    # StratifiedGroupKFold keeps a whole description in one split and balances the label.
     n_test_folds = max(2, round(1.0 / test_size))
     _require_groups(groups, n_test_folds)
-    # StratifiedGroupKFold keeps a whole description in one split and balances the label.
     outer = StratifiedGroupKFold(n_splits=n_test_folds, shuffle=True, random_state=seed)
     trainval, test = next(outer.split(np.zeros((n, 1)), y, groups))
+
+    # Step 2: split the rest into train and validation, so val_size is a share of all rows.
     n_val_folds = max(2, round(1.0 / (val_size / (1.0 - test_size))))
     _require_groups(groups[trainval], n_val_folds)
     inner = StratifiedGroupKFold(n_splits=n_val_folds, shuffle=True, random_state=seed + 1)
     tr, va = next(inner.split(np.zeros((len(trainval), 1)), y[trainval], groups[trainval]))
+
+    # Step 3: back to positional indices of the full frame, then verify the result.
     splits = {
         "train": np.sort(trainval[tr]).astype(int),
         "val": np.sort(trainval[va]).astype(int),
@@ -148,6 +169,8 @@ def save_splits(path, splits, df):
 def load_splits(path, df):
     """Load saved indices and check they belong to this exact cleaned data frame."""
     z = np.load(path)
+
+    # Refuse indices made for a different cleaned frame (rows dropped, added or reordered).
     assert str(z["fingerprint"]) == _fingerprint(df), "splits were made for different data; rebuild them"
     return {k: z[k] for k in ("train", "val", "test")}
 
@@ -161,6 +184,8 @@ def _fingerprint(df):
 def save_metadata(path, df, splits, seed):
     """Write split sizes, positives and column lists to a JSON file."""
     y = df[TARGET].to_numpy()
+
+    # Per-split size and class balance, plus the column groups used by the pipeline.
     meta = {
         "seed": int(seed),
         "n_rows": int(len(df)),
@@ -179,6 +204,8 @@ def save_metadata(path, df, splits, seed):
             "binary": BIN_COLS,
         },
     }
+
+    # Write the file, creating its folder when needed.
     folder = os.path.dirname(path)
     if folder:
         os.makedirs(folder, exist_ok=True)
@@ -194,9 +221,12 @@ def load_metadata(path):
 
 def seed_everything(seed):
     """Seed Python and numpy, plus torch when it happens to be installed."""
+    # Python, numpy and hash-based ordering.
     random.seed(seed)
     np.random.seed(seed)
     os.environ["PYTHONHASHSEED"] = str(seed)
+
+    # Torch (CPU and every GPU) only when it is installed.
     try:
         import torch  # lazy: torch is optional and must never slow down a normal import
     except ImportError:

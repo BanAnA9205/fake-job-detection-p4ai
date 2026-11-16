@@ -21,14 +21,19 @@ def metrics_at_threshold(y, score, thr):
     y = np.asarray(y).astype(int)
     score = np.asarray(score, dtype=float)
     assert y.shape == score.shape, "y and score must have the same shape"
+
+    # Confusion counts at this threshold.
     pred = (score >= thr).astype(int)
     tp = int(((pred == 1) & (y == 1)).sum())
     fp = int(((pred == 1) & (y == 0)).sum())
     fn = int(((pred == 0) & (y == 1)).sum())
     tn = int(((pred == 0) & (y == 0)).sum())
+
+    # Derived rates; an empty denominator gives 0 instead of a division error.
     precision = tp / (tp + fp) if tp + fp else 0.0
     recall = tp / (tp + fn) if tp + fn else 0.0
     f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+
     return {
         "precision": precision,
         "recall": recall,
@@ -48,6 +53,8 @@ def evaluate(y, score, thr):
     """
     y = np.asarray(y).astype(int)
     score = np.asarray(score, dtype=float)
+
+    # Threshold-dependent metrics first, then the two threshold-free ranking metrics.
     out = metrics_at_threshold(y, score, thr)
     out["pr_auc"] = float(average_precision_score(y, score))
     out["roc_auc"] = float(roc_auc_score(y, score))
@@ -64,6 +71,8 @@ def pick_threshold(y_val, score_val, strategy="max_f1", min_recall=None):
     y = np.asarray(y_val).astype(int)
     s = np.asarray(score_val, dtype=float)
     assert y.shape == s.shape, "y_val and score_val must have the same shape"
+
+    # Scan every candidate threshold and keep the one with the best F1.
     best_thr, best_f1 = None, -1.0
     # Predictions only change at the observed score values, so those are the
     # only candidate thresholds. On ties >= keeps the HIGHER threshold, which
@@ -74,6 +83,7 @@ def pick_threshold(y_val, score_val, strategy="max_f1", min_recall=None):
             continue
         if m["f1"] >= best_f1:
             best_f1, best_thr = m["f1"], float(thr)
+
     if best_thr is None:
         raise ValueError("no threshold reaches the requested min_recall")
     return best_thr
@@ -84,6 +94,8 @@ def sweep_thresholds(y, score, n=50):
     y = np.asarray(y).astype(int)
     s = np.asarray(score, dtype=float)
     assert y.shape == s.shape, "y and score must have the same shape"
+
+    # One row of metrics per evenly spaced threshold between the lowest and highest score.
     rows = []
     for thr in np.linspace(float(s.min()), float(s.max()), n):
         m = metrics_at_threshold(y, s, thr)
@@ -104,6 +116,7 @@ def compare_table(results):
     results maps model name to {"train": <evaluate dict>, "test": <evaluate dict>}.
     gap is train PR-AUC minus test PR-AUC, i.e. the generalization gap.
     """
+    # One row per model; "gap" is the generalisation gap in PR-AUC.
     rows = []
     for name, res in results.items():
         tr, te = res["train"], res["test"]
@@ -132,6 +145,8 @@ def aggregate_seeds(rows):
     """
     df = pd.DataFrame(rows)
     assert "model" in df.columns, "each row needs a 'model' key"
+
+    # Mean and std per model over the numeric columns (seed is an id, not a metric).
     num_cols = [
         c for c in df.columns if c not in ("model", "seed")
         and pd.api.types.is_numeric_dtype(df[c])
@@ -146,11 +161,15 @@ def plot_confusions(cm_by_name, class_names, n_cols=3, title="Confusion matrices
     """Grid of annotated confusion-matrix heatmaps, one per model. Returns the Figure."""
     names = list(cm_by_name)
     assert names, "cm_by_name is empty"
+
+    # Grid layout: n_cols per row, as many rows as needed.
     n_rows = int(np.ceil(len(names) / n_cols))
     fig, axes = plt.subplots(
         n_rows, n_cols, figsize=(4 * n_cols, 3.5 * n_rows), squeeze=False
     )
+
     for ax, name in zip(axes.ravel(), names):
+        # The heatmap and its axis labels.
         cm = np.asarray(cm_by_name[name])
         ax.imshow(cm, cmap="Blues")
         ax.set_title(name)
@@ -158,12 +177,16 @@ def plot_confusions(cm_by_name, class_names, n_cols=3, title="Confusion matrices
         ax.set_yticks(range(len(class_names)), labels=class_names)
         ax.set_xlabel("predicted")
         ax.set_ylabel("actual")
+
+        # The count in each cell, white on dark cells.
         for i in range(cm.shape[0]):
             for j in range(cm.shape[1]):
                 ax.text(
                     j, i, str(cm[i, j]), ha="center", va="center",
                     color="white" if cm[i, j] > cm.max() / 2 else "black",
                 )
+
+    # Hide unused panels in the last row.
     for ax in axes.ravel()[len(names):]:
         ax.set_visible(False)
     fig.suptitle(title)
@@ -178,12 +201,18 @@ def plot_pr_curves(curves_by_name, pos_rate=None, title="Precision-recall curves
     as returned by sklearn's precision_recall_curve.
     """
     fig, ax = plt.subplots(figsize=(6, 5))
+
+    # One step curve per model.
     for name, (prec, rec) in curves_by_name.items():
         ax.step(rec, prec, where="post", label=name)
+
+    # Random-guess baseline.
     if pos_rate is not None:
         # A random classifier stays flat at the positive rate, so that is the
         # baseline every curve should beat.
         ax.axhline(pos_rate, linestyle="--", color="grey", label="baseline")
+
+    # Axes, legend, title.
     ax.set_xlabel("recall")
     ax.set_ylabel("precision")
     ax.set_ylim(-0.02, 1.02)
@@ -200,12 +229,16 @@ def group_breakdown(y, pred, groups):
     pred = np.asarray(pred).astype(int)
     g = pd.Series(groups).reset_index(drop=True)
     assert len(g) == len(y) == len(pred), "y, pred and groups must align"
+
     rows = []
     for value, count in g.value_counts(dropna=False).sort_index().items():
+        # Rows of this group (missing values form their own group).
         if pd.isna(value):
             mask = g.isna().to_numpy()
         else:
             mask = (g == value).to_numpy()
+
+        # Recall and precision restricted to the group.
         yy, pp = y[mask], pred[mask]
         pos = int(yy.sum())
         tp = int(((pp == 1) & (yy == 1)).sum())

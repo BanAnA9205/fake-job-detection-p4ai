@@ -42,6 +42,8 @@ def save_result(out_dir, model, group, seed, thr, val, test, y_val, score_val, y
     """Write the json and npz files for one (model, seed) run."""
     os.makedirs(out_dir, exist_ok=True)
     json_path, npz_path = _paths(out_dir, model, seed)
+
+    # Metrics and settings go to the json file...
     record = {"model": model, "group": group, "seed": int(seed), "thr": float(thr),
               "val": val, "test": test, "train_pr_auc": train_pr_auc,
               "best_params": best_params or {}, "seconds": seconds, "notes": notes}
@@ -49,6 +51,8 @@ def save_result(out_dir, model, group, seed, thr, val, test, y_val, score_val, y
         record["history"] = history
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(_plain(record), f, indent=2)
+
+    # ...and the raw scores to the npz, so curves and matrices can be rebuilt later.
     np.savez(npz_path, y_val=np.asarray(y_val), score_val=np.asarray(score_val),
              y_test=np.asarray(y_test), score_test=np.asarray(score_test))
 
@@ -66,6 +70,8 @@ def load_results(*out_dirs):
         for path in sorted(glob.glob(os.path.join(out_dir, "*_seed*.json"))):
             with open(path, encoding="utf-8") as f:
                 r = json.load(f)
+
+            # Run-level fields first, then the headline metrics of both splits.
             row = {"model": r["model"], "group": r["group"], "seed": r["seed"], "thr": r["thr"],
                    "train_pr_auc": r.get("train_pr_auc"), "seconds": r.get("seconds")}
             for split in ("val", "test"):

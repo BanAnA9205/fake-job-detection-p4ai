@@ -29,8 +29,11 @@ def get_splits(df, seed, split_dir="splits"):
 
 def fit_model(name, seed, train, y_train, n_iter, cv, n_jobs):
     """Return (fitted model, best params, cv score). Dummies are just fitted, the rest are tuned."""
+    # Baselines have nothing to tune.
     if name.startswith("dummy"):
         return md.get_baselines(seed)[name].fit(train, y_train), {}, None
+
+    # Real models: random search with grouped CV on the training rows only.
     pipe = md.get_models(seed)[name]
     search = md.tune(pipe, md.PARAM_GRIDS[name], train, y_train, train["group"].to_numpy(),
                      n_iter=n_iter, cv=cv, seed=seed, n_jobs=n_jobs)
@@ -41,22 +44,29 @@ def run_one(name, seed, parts, out_dir, n_iter, cv, n_jobs):
     """Fit one model on one split and save its results."""
     train, val, test = parts
     y_train, y_val, y_test = (p["fraudulent"].to_numpy() for p in parts)
+
+    # Fit (and tune) while recording warnings instead of hiding them.
     start = time.time()
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         model, best_params, cv_score = fit_model(name, seed, train, y_train, n_iter, cv, n_jobs)
     # Keep one line per distinct warning (for example "did not converge") in the notes.
     warned = sorted({str(w.message).splitlines()[0][:80] for w in caught})
+
+    # Scores on every split, then the threshold from validation and the metrics at it.
     s_train, s_val, s_test = (ev.score_of(model, p) for p in parts)
     thr = ev.pick_threshold(y_val, s_val)          # chosen on validation only
     val_m = ev.evaluate(y_val, s_val, thr)
     test_m = ev.evaluate(y_test, s_test, thr)       # the test rows are scored once, here
     seconds = round(time.time() - start, 1)
+
+    # Save the shared json + npz pair.
     rh.save_result(out_dir, name, "classical", seed, thr, val_m, test_m, y_val, s_val, y_test,
                    s_test, train_pr_auc=ev.evaluate(y_train, s_train, thr)["pr_auc"],
                    best_params=best_params, seconds=seconds,
                    notes=f"tuned with {n_iter} random candidates, {cv}-fold grouped CV; "
                          f"cv PR-AUC {cv_score}; warnings: {warned or 'none'}")
+
     # Only validation is printed on purpose: test numbers stay in the saved files until the final report.
     print(f"seed {seed} {name:16s} val PR-AUC {val_m['pr_auc']:.3f} F1 {val_m['f1']:.3f} | {seconds}s"
           f"{' | WARNINGS: ' + '; '.join(warned) if warned else ''}", flush=True)
@@ -67,11 +77,14 @@ def run_classical(df, seeds, out_dir="outputs/classical", models=ALL_MODELS,
     """All models for all seeds on the cleaned, featurised frame df; finished runs are skipped."""
     assert 1 <= n_jobs <= 4, "n_jobs is capped at 4 to keep the machine cool"
     for seed in seeds:
+        # The saved split for this seed, as three frames.
         dh.seed_everything(seed)
         splits = get_splits(df, seed, split_dir)
         parts = [df.iloc[splits[k]] for k in ("train", "val", "test")]
         print(f"seed {seed}: rows train/val/test = {[len(p) for p in parts]}, "
               f"positives = {[int(p['fraudulent'].sum()) for p in parts]}", flush=True)
+
+        # Every model on this split; finished runs are skipped so a crash can resume.
         for name in models:
             if rh.result_exists(out_dir, name, seed):
                 print(f"seed {seed} {name}: already done, skipping")

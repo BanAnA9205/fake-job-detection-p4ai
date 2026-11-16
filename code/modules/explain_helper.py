@@ -15,19 +15,25 @@ def top_linear_terms(pipe, k=20):
     pre, clf = pipe.named_steps["pre"], pipe.named_steps["clf"]
     if not hasattr(clf, "coef_"):
         raise TypeError("top_linear_terms needs a linear estimator with coef_")
+
+    # Feature names from the fitted preprocessor, aligned with the coefficients.
     names = np.asarray(pre.get_feature_names_out())
     # Binary linear models store coef_ as (n_features,) or (1, n_features).
     coefs = np.asarray(clf.coef_, dtype=float).ravel()
     assert len(names) == len(coefs), "feature names and coefficients misaligned"
+
+    # Rank the coefficients and take both ends: most fraud-like and most real-like terms.
     order = np.argsort(coefs)  # ascending: most negative first
     neg_idx = order[:k]
     pos_idx = order[::-1][:k]  # descending: most positive first
+
     pos = pd.DataFrame(
         {"term": names[pos_idx], "coef": coefs[pos_idx], "direction": "positive"}
     )
     neg = pd.DataFrame(
         {"term": names[neg_idx], "coef": coefs[neg_idx], "direction": "negative"}
     )
+
     return pd.concat([pos, neg], ignore_index=True)
 
 
@@ -42,10 +48,14 @@ def permutation_table(
     to explain.
     """
     n_jobs = max(1, min(int(n_jobs), 4))  # safety cap from the project spec
+
+    # Shuffle each raw column n_repeats times and record the score drop.
     r = permutation_importance(
         pipe, X, y, scoring=scoring, n_repeats=n_repeats,
         random_state=seed, n_jobs=n_jobs,
     )
+
+    # Tabulate by column name.
     if hasattr(X, "columns"):
         col_names = list(X.columns)
     else:
@@ -57,6 +67,7 @@ def permutation_table(
             "importance_std": r.importances_std,
         }
     )
+
     # We always permute every column (the pipeline needs them all) and only
     # filter the table afterwards when the caller asks for a subset.
     if cols is not None:
@@ -74,11 +85,17 @@ def show_errors(df, y_true, score, thr, k=10):
     y = np.asarray(y_true).astype(int)
     s = np.asarray(score, dtype=float)
     assert len(df) == len(y) == len(s), "df, y_true and score must align"
+
+    # Find the wrong calls at this threshold.
     pred = s >= thr
     fp_idx = np.where((pred == 1) & (y == 0))[0]
     fn_idx = np.where((pred == 0) & (y == 1))[0]
+
+    # Keep the k most confident mistakes of each kind.
     fp_idx = fp_idx[np.argsort(-s[fp_idx])][:k]
     fn_idx = fn_idx[np.argsort(s[fn_idx])][:k]
+
+    # One table row per mistake, with a text preview.
     rows = []
     for kind, idx in (("false_positive", fp_idx), ("false_negative", fn_idx)):
         for i in idx:
@@ -104,6 +121,8 @@ def top_tree_features(pipe, k=20):
     names = np.asarray(pre.get_feature_names_out())
     imp = np.asarray(clf.feature_importances_, dtype=float)
     assert len(names) == len(imp), "feature names and importances misaligned"
+
+    # Top k features by impurity importance.
     order = np.argsort(-imp)[:k]
     return pd.DataFrame({"term": names[order], "importance": imp[order]})
 

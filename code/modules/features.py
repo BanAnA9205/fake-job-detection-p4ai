@@ -68,23 +68,34 @@ def _upper_ratio(text):
 def add_engineered_features(df):
     """Copy df and add the text blob, country, missing flags and spam cues."""
     out = df.copy()
+
+    # One text blob per ad: title + profile + description + requirements + benefits.
     text = out[TEXT_COLS[0]].fillna("").astype(str)
     for col in TEXT_COLS[1:]:
         text = text + " " + out[col].fillna("").astype(str)
     out["text"] = text
+
+    # Metadata: country from the location string, and whether a salary is given.
     out["country"] = out["location"].map(_country)
     out["has_salary"] = out["salary_range"].notna().astype(int)
+
+    # Missingness flags: an empty field is itself a signal (see the EDA notebook).
     for col in ["company_profile", "requirements", "benefits", "department"]:
         out["missing_" + col] = out[col].isna().astype(int)
+
+    # Length and shouting statistics.
     out["desc_len"] = out["description"].fillna("").str.len().astype(int)
     out["title_len"] = out["title"].fillna("").str.len().astype(int)
     out["n_exclaim"] = text.str.count("!").astype(int)
     out["n_upper_ratio"] = _upper_ratio(text)
+
+    # Spam cues: link / email / phone placeholders and money-making phrases.
     out["has_url"] = text.str.contains(URL_PATTERN, regex=True).astype(int)
     out["has_email"] = text.str.contains(EMAIL_PATTERN, regex=True).astype(int)
     out["has_phone"] = text.str.contains(PHONE_PATTERN, regex=True).astype(int)
     out["has_money_words"] = text.str.contains(
         MONEY_PATTERN, case=False, regex=True).astype(int)
+
     assert len(out) == len(df), "feature engineering changed the row count"
     return out
 
@@ -110,15 +121,23 @@ class Bm25Transformer(BaseEstimator, TransformerMixin):
     def fit(self, X, y=None):
         X = sp.csr_matrix(X)
         n_docs = X.shape[0]
+
+        # Inverse document frequency: rare words weigh more.
         doc_freq = np.bincount(X.indices, minlength=X.shape[1])  # ads containing each word
         self.idf_ = np.log(1 + (n_docs - doc_freq + 0.5) / (doc_freq + 0.5))
+
+        # Average ad length, the reference for length normalisation.
         self.avg_len_ = float(np.asarray(X.sum(axis=1)).mean())
         return self
 
     def transform(self, X):
         X = sp.csr_matrix(X, dtype=float, copy=True)
+
+        # Length of the ad that each stored count belongs to.
         doc_len = np.asarray(X.sum(axis=1)).ravel()
-        len_per_entry = np.repeat(doc_len, np.diff(X.indptr))  # length of each entry's ad
+        len_per_entry = np.repeat(doc_len, np.diff(X.indptr))
+
+        # BM25: saturating term frequency (k1) with length normalisation (b), times idf.
         tf = X.data
         norm = tf + self.k1 * (1 - self.b + self.b * len_per_entry / self.avg_len_)
         X.data = self.idf_[X.indices] * tf * (self.k1 + 1) / norm
@@ -155,12 +174,15 @@ def make_preprocessor(kind="tfidf", max_features=20000, ngram_range=(1, 2), min_
 
     kind picks how the text is weighted: "tfidf" or "bm25". Everything else is shared.
     """
+    # The only difference between the two kinds is the text weighting.
     if kind == "tfidf":
         text = make_tfidf(max_features, ngram_range, min_df)
     elif kind == "bm25":
         text = make_bm25(max_features, ngram_range, min_df)
     else:
         raise ValueError(f"unknown preprocessor kind: {kind!r}")
+
+    # One block per kind of column; the rest of the pipeline sees a single sparse matrix.
     return ColumnTransformer([
         ("text", text, "text"),
         # min_frequency=30: categories seen fewer than 30 times share one "infrequent" column.

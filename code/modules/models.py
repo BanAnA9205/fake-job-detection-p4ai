@@ -75,8 +75,8 @@ PARAM_GRIDS = {
 def tune(pipe, grid, X, y, groups, n_iter=8, cv=5, scoring="average_precision",
          seed=0, n_jobs=1):
     """Random search on the training rows only; returns the fitted search object."""
-    # StratifiedGroupKFold keeps the class ratio per fold and keeps rows with the
-    # same description (a duplicate group) inside one fold, so CV does not leak.
+    # CV folds: keep the class ratio per fold and keep rows with the same description
+    # (a duplicate group) inside one fold, so CV does not leak.
     splitter = StratifiedGroupKFold(n_splits=cv, shuffle=True, random_state=seed)
     search = RandomizedSearchCV(
         pipe,
@@ -89,5 +89,7 @@ def tune(pipe, grid, X, y, groups, n_iter=8, cv=5, scoring="average_precision",
         refit=True,
         error_score="raise",
     )
+
+    # Fit on the training rows; groups tells the splitter which rows share a description.
     search.fit(X, y, groups=groups)
     return search

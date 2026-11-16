@@ -28,16 +28,19 @@ def embed_texts(
     ids = np.asarray(ids)
     assert len(texts) == len(ids), "texts and ids must have the same length"
 
+    # Cache file names are derived from the model name.
     os.makedirs(cache_dir, exist_ok=True)
     slug = model_name.replace("/", "_")
     emb_path = os.path.join(cache_dir, slug + "_emb.npy")
     ids_path = os.path.join(cache_dir, slug + "_ids.npy")
 
+    # Reuse the cache when it was built for exactly these rows.
     if os.path.exists(emb_path) and os.path.exists(ids_path):
         cached_ids = np.load(ids_path, allow_pickle=True)
         if np.array_equal(cached_ids, ids):
             return np.load(emb_path)
 
+    # Cache miss: load the encoder (imported here so laptops without it can still import this module).
     from sentence_transformers import SentenceTransformer
 
     model = SentenceTransformer(model_name, device=device)
@@ -53,6 +56,7 @@ def embed_texts(
     emb = np.asarray(emb, dtype=np.float32)
     assert emb.shape[0] == len(ids), "embedding row count mismatch"
 
+    # Save the vectors together with their row ids for the next run.
     np.save(emb_path, emb)
     np.save(ids_path, ids)
     return emb
