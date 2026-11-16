@@ -1,7 +1,7 @@
-"""Fine-tuning a pretrained encoder for fraud detection (run by run_deep.py).
+"""Fine-tuning a pretrained encoder for fraud detection (run by modules/deep_runs.py).
 
 Torch and transformers are imported inside the functions, so this module can be
-imported on a laptop without them and run_deep.py --help still works.
+imported on a laptop without them.
 """
 
 import contextlib

@@ -1,11 +1,12 @@
-"""Build the three demo notebooks with nbformat. No data is read, nothing is fitted.
+"""Build the three project notebooks with nbformat. No data is read, nothing is fitted.
 
 Run from the code/ folder (the script resolves its own folder, so cwd does not matter):
     python notebooks/build_notebooks.py
 
-Writes 01_eda.ipynb, 02_classical_demo.ipynb and 03_results.ipynb (overwriting any
-existing copies), then re-reads each file and ast.parse-checks every code cell
-(magics and ! lines ignored). The notebooks themselves are executed by the orchestrator.
+Writes 01_eda_preprocessing, 02_classical_ml and 03_deep_learning (.ipynb), overwriting
+existing copies, then re-reads each file and ast.parse-checks every code cell (magics and
+! lines ignored). The notebooks are executed separately with jupyter nbconvert. All runs
+happen inside the notebooks; the .py files in modules/ are importable helpers only.
 """
 
 import ast
@@ -60,12 +61,13 @@ def check(path):
 
 NB1 = [
     ("md", """
-# Fake job postings: exploratory data analysis (notebook 01)
+# Fake job postings: EDA and preprocessing (notebook 01)
 
 We get to know the EMSCAD dataset before touching any model: class balance, missing
 data, duplicates, text lengths and simple spam-style flags. Every section feeds a
-decision in the modelling notebooks: what to drop, how to split, and which metrics
-to trust.
+decision: what to drop, how to split, and which metrics to trust. The second half builds
+the preprocessing that notebooks 02 (classical ML) and 03 (deep learning) share:
+cleaning, engineered features, the model matrix, and the five saved train/val/test splits.
 
 Run time: about 1 minute.
 """),
@@ -79,12 +81,13 @@ import seaborn as sns
 
 from modules import data_helper as dh
 from modules import features as ft
+from modules.classical_runs import get_splits
 
 DATA = "../data/fake_job_postings.csv"
 """),
     ("code", """
+SEEDS = [0, 1, 2, 3, 4]  # one split per seed; every model is evaluated on all five
 SEED = 0
-SPLIT_PATH = "splits/seed0.npz"
 
 dh.seed_everything(SEED)  # Session 5: fix every seed so runs are reproducible
 sns.set_theme(style="whitegrid")
@@ -241,31 +244,82 @@ Same table for employment type, with missing as its own value.
 fraud_rate(feats["employment_type"].fillna("missing"), feats["fraudulent"])
 """),
     ("md", """
-## Cleaning and the split
+## Cleaning
 
-Session 5: clean first, then split, then fit. `clean` drops exact duplicates and
-hashes each normalised description into a `group` id; `make_splits` uses
-`StratifiedGroupKFold` on that group so one description can never sit in two splits,
-while keeping the class ratio balanced. We reuse the saved seed-0 split when it
-exists, so this notebook and the runners see the same rows.
+Session 5: clean first, then split, then fit. `clean` drops exact duplicates (ignoring
+`job_id`) and hashes each normalised description into a `group` id, so near-copies can
+be kept on one side of every split later.
 """),
     ("code", """
 dfc = dh.clean(df)
 print("rows before cleaning:", len(df), "| after:", len(dfc))
-if os.path.exists(SPLIT_PATH):
-    splits = dh.load_splits(SPLIT_PATH, dfc)
-else:
-    splits = dh.make_splits(dfc, seed=SEED)
-y = dfc["fraudulent"].to_numpy()
-for name, idx in splits.items():
-    print(f"{name:5s}: {len(idx):6d} rows, {int(y[idx].sum()):4d} fraud ({y[idx].mean():.1%})")
+print("description groups:", dfc["group"].nunique())
+"""),
+    ("md", """
+## Feature engineering
+
+`add_engineered_features` adds the joined `text` column (title, company profile,
+description, requirements, benefits), missing-value flags, length and capitalisation
+statistics, and spam cues. These are computed row by row from the ad itself, so they
+cannot leak information between splits.
 """),
     ("code", """
-groups_by_split = {name: set(dfc["group"].iloc[idx]) for name, idx in splits.items()}
-for a_name, b_name in (("train", "val"), ("train", "test"), ("val", "test")):
-    shared = groups_by_split[a_name] & groups_by_split[b_name]
-    assert not shared, f"{len(shared)} description groups shared between {a_name} and {b_name}"
-print("checked: no description group appears in two splits")
+dfe = ft.add_engineered_features(dfc)
+new_cols = [c for c in dfe.columns if c not in df.columns]
+print(len(new_cols), "new columns:", ", ".join(new_cols))
+dfe[["title", "text"] + ft.NUMERIC_COLS[:3]].head(3)
+"""),
+    ("md", """
+## Splits: by description group, saved for all seeds
+
+`make_splits` uses `StratifiedGroupKFold` on the group id (60/20/20, class ratio kept), so one
+description can never sit in two splits. Each seed's indices are saved to `splits/` with a
+fingerprint of the cleaned data; every notebook and every machine reloads exactly these rows.
+"""),
+    ("code", """
+y = dfe["fraudulent"].to_numpy()
+rows = []
+for seed in SEEDS:
+    splits = get_splits(dfe, seed)  # loads splits/seed<N>.npz, creating it the first time
+    for name, idx in splits.items():
+        rows.append({"seed": seed, "split": name, "rows": len(idx),
+                     "fraud": int(y[idx].sum()), "fraud rate": round(float(y[idx].mean()), 4)})
+pd.DataFrame(rows).pivot(index="seed", columns="split", values=["rows", "fraud"])
+"""),
+    ("code", """
+for seed in SEEDS:
+    splits = get_splits(dfe, seed)
+    groups = {name: set(dfe["group"].iloc[idx]) for name, idx in splits.items()}
+    for a_name, b_name in (("train", "val"), ("train", "test"), ("val", "test")):
+        shared = groups[a_name] & groups[b_name]
+        assert not shared, f"seed {seed}: {len(shared)} groups shared by {a_name} and {b_name}"
+print("checked: no description group appears in two splits, for every seed")
+"""),
+    ("md", """
+## The model matrix (fitted on the training rows only)
+
+`make_preprocessor` is one `ColumnTransformer`: TF-IDF over the joined text, one-hot
+metadata, ordinal levels, scaled numeric statistics and the binary flags. Session 5: it
+is fitted on the training rows only and then applied to validation and test.
+"""),
+    ("code", """
+split0 = get_splits(dfe, SEED)
+pre = ft.make_preprocessor("tfidf")
+X_train = pre.fit_transform(dfe.iloc[split0["train"]])
+X_val = pre.transform(dfe.iloc[split0["val"]])
+names = pre.get_feature_names_out()
+print("train matrix:", X_train.shape, "| validation matrix:", X_val.shape)
+pd.Series([n.split("__")[0] for n in names]).value_counts().rename("columns per block").to_frame()
+"""),
+    ("md", """
+The binary-flag block passes through a `VarianceThreshold`: flags that are (almost)
+always 0 or always 1 on the training rows carry no information and are dropped.
+"""),
+    ("code", """
+kept = {n.split("__", 1)[1] for n in names if n.startswith("binary__")}
+dropped = [c for c in ft.BINARY_COLS if c not in kept]
+print("flags kept   :", sorted(kept))
+print("flags dropped:", dropped or "none")
 """),
     ("md", """
 ## What the EDA tells us to do
@@ -280,6 +334,8 @@ print("checked: no description group appears in two splits")
   them away.
 - The text fields carry the strongest signal: keep the joined text central to the
   feature set and read model errors from it.
+- Fit every transformer on the training rows only; the saved splits make that the same
+  for every model, notebook and machine.
 """),
 ]
 
@@ -289,15 +345,18 @@ print("checked: no description group appears in two splits")
 
 NB2 = [
     ("md", """
-# Classical models: a live walkthrough (notebook 02)
+# Classical ML: dummy, logistic regression, BM25, tree, MLP (notebook 02)
 
-One seed-0 split, one pipeline from the course slides end to end: dummy baselines,
-TF-IDF logistic regression with a threshold picked on validation, BM25, a decision
-tree and an MLP, then explanations, error reading and a per-group check. Only
-training and validation rows are used here; the test split stays untouched and is
-read from saved files in notebook 03.
+Part A walks through one seed-0 split with the pipeline from the course slides: dummy
+baselines, TF-IDF logistic regression with a threshold picked on validation, BM25, a decision
+tree and an MLP, then explanations and error reading. Only training and validation rows
+are used there. Part B runs the tuned experiment for all five split seeds (finished runs are
+reused from `outputs/classical/`, so this is fast unless you delete them), then reads the
+saved results: the test split is scored once per (model, seed) inside the run and only read
+back afterwards.
 
-Run time: about 5 minutes.
+Run time: about 5 minutes for part A; part B reads saved files in under a minute, or about
+an hour if it has to recompute all 30 runs.
 """),
     ("code", """
 import sys, os; os.chdir(os.path.join(os.getcwd(), "..")) if os.path.basename(os.getcwd()) == "notebooks" else None; sys.path.insert(0, "."); import warnings
@@ -312,17 +371,25 @@ from modules import features as ft
 from modules import models as md
 from modules import eval_helper as ev
 from modules import explain_helper as eh
+from modules import results_helper as rh
+from modules import classical_runs as cr
+from sklearn.metrics import confusion_matrix, precision_recall_curve
 
 DATA = "../data/fake_job_postings.csv"
 """),
     ("code", """
 SEED = 0
+SEEDS = [0, 1, 2, 3, 4]
 SPLIT_PATH = "splits/seed0.npz"
+OUT_CLASSICAL = "outputs/classical"
+GROUPS = ["classical"]  # notebook 03 adds the deep models to the same comparison
 
 dh.seed_everything(SEED)
 sns.set_theme(style="whitegrid")
 """),
     ("md", """
+# Part A: one split, validation only
+
 ## Setup: the seed-0 split
 
 Load, clean, add features, and reuse the saved seed-0 split (Session 5: split
@@ -469,8 +536,7 @@ report("mlp", md.get_models(SEED)["mlp"].fit(train, y_train))
 ## All models side by side
 
 Train versus validation PR-AUC per model; the gap column is the generalisation gap.
-This is validation, not test: `run_classical.py` scores the test split once and
-notebook 03 reads it.
+This is validation, not test: part B scores the test split once per (model, seed).
 """),
     ("code", """
 table = ev.compare_table(results).rename(columns=lambda c: c.replace("test_", "val_"))
@@ -479,7 +545,7 @@ table.sort_values("val_pr_auc", ascending=False)
     ("md", """
 ## Hyper-parameter tuning (switched off)
 
-The full random search over all models and five seeds lives in `run_classical.py`:
+Part B below runs the full random search over all models and five seeds:
 grouped cross-validation on the training rows only, scoring PR-AUC (Session 7). The
 flag below runs a tiny live version (`n_iter=3, cv=3`); keep it False during the
 demo.
@@ -564,50 +630,27 @@ Reading: rows with few ads have noisy recall and precision; the count column say
 how much to trust each row.
 """),
     ("md", """
-## Where to next
+# Part B: tuned runs over five split seeds
 
-`run_classical.py` repeats this pipeline for all models with proper tuning over
-five split seeds and saves one JSON + NPZ pair per (model, seed) into
-`outputs/classical/`. Notebook 03 reads those files and reports the honest test
-numbers.
+For each seed and model `cr.run_classical` tunes on the training rows (random search, 4
+candidates, 3-fold grouped CV, scoring PR-AUC), refits, picks the threshold on validation, and
+scores validation and test once. One JSON + NPZ pair per (model, seed) goes to
+`outputs/classical/`; pairs that already exist are skipped. Only validation numbers are printed.
+"""),
+    ("code", """
+RUN_CLASSICAL = True  # False: only read the saved results below
+if RUN_CLASSICAL:
+    df_all = ft.add_engineered_features(dh.clean(dh.load_raw(DATA)))
+    cr.run_classical(df_all, SEEDS, out_dir=OUT_CLASSICAL, n_iter=4, cv=3)
 """),
 ]
 
 # ---------------------------------------------------------------------------
-# Notebook 03: results over seeds, read from saved files only
+# Shared results cells (used by notebooks 02 and 03): read saved files only, fit nothing
 # ---------------------------------------------------------------------------
 
-NB3 = [
-    ("md", """
-# Results: every model, every seed (notebook 03)
-
-This notebook only reads the files saved by `run_classical.py` (and `run_deep.py` on
-the GPU box): test metrics aggregated over seeds, validation versus test, per-seed
-spread, curves and confusion matrices rebuilt from the saved scores, and the errors
-every model misses. Nothing is fitted here.
-
-Run time: under 1 minute.
-"""),
+RESULTS = [
     ("code", """
-import sys, os; os.chdir(os.path.join(os.getcwd(), "..")) if os.path.basename(os.getcwd()) == "notebooks" else None; sys.path.insert(0, "."); import warnings
-
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-from sklearn.metrics import confusion_matrix, precision_recall_curve
-
-from modules import data_helper as dh
-from modules import features as ft
-from modules import eval_helper as ev
-from modules import results_helper as rh
-
-DATA = "../data/fake_job_postings.csv"
-"""),
-    ("code", """
-SEED = 0
-SPLIT_PATH = "splits/seed0.npz"
-OUT_CLASSICAL = "outputs/classical"
 OUT_DEEP = "outputs/deep"
 DIRS = {"classical": OUT_CLASSICAL, "deep": OUT_DEEP}
 
@@ -617,27 +660,21 @@ class StopExecution(Exception):
 
     def _render_traceback_(self):
         pass  # IPython hook: an empty traceback, so the notebook just stops
-
-
-dh.seed_everything(SEED)
-sns.set_theme(style="whitegrid")
 """),
     ("md", """
 ## Load the saved results
 
 `results_helper.load_results` collects one row per (model, seed) from the JSON
-files. Deep results are included when `outputs/deep/` exists and is non-empty. If
+files of the groups listed in `GROUPS` (deep results only when `outputs/deep/` is non-empty). If
 nothing is found we stop here with a message instead of crashing.
 """),
     ("code", """
-dirs = [OUT_CLASSICAL]
-if os.path.isdir(OUT_DEEP) and os.listdir(OUT_DEEP):
-    dirs.append(OUT_DEEP)
-res = rh.load_results(*dirs)
-res = res[res["group"].isin(DIRS)]
+dirs = [d for g, d in DIRS.items() if g in GROUPS and os.path.isdir(d) and os.listdir(d)]
+res = rh.load_results(*dirs) if dirs else pd.DataFrame(columns=["group"])
+res = res[res["group"].isin(GROUPS)]
 if res.empty:
     print("No result files were found. Looked in:", dirs)
-    print("Run run_classical.py first (and run_deep.py for the deep models), then re-run.")
+    print("Run the experiment cells of this notebook first, then re-run this section.")
     raise StopExecution
 print(f"{len(res)} runs found: {res['model'].nunique()} models, "
       f"seeds {sorted(int(x) for x in res['seed'].unique())}")
@@ -838,8 +875,18 @@ else:
     for _, r in missed.iterrows():
         print("-", str(r["title"])[:80], "|", str(r["description"])[:150], "\\n")
 """),
+]
+
+NB2 = NB2 + [
     ("md", """
-## Findings so far (classical models only; update after the deep results are in)
+# Results of the classical runs
+
+Everything below reads the saved files; nothing is fitted. The same section is repeated in
+notebook 03 with the deep models added.
+"""),
+] + RESULTS + [
+    ("md", """
+## Findings (classical models)
 
 Numbers are the means over the 5 split seeds in the first table, test split.
 
@@ -856,12 +903,170 @@ Numbers are the means over the 5 split seeds in the first table, test split.
 """),
 ]
 
+# ---------------------------------------------------------------------------
+# Notebook 03: frozen embeddings and fine-tuned BERT, then the final comparison
+# ---------------------------------------------------------------------------
+
+NB3 = [
+    ("md", """
+# Deep learning: frozen embeddings and fine-tuned DistilBERT (notebook 03)
+
+Session 7 order: first freeze a pretrained encoder and train only a small head on its
+embeddings (cheap, cached), then fine-tune the whole encoder (expensive). Both are
+compared with the classical models of notebook 02 on the same five splits, scored once
+on test per (model, seed). Heavy cells need a GPU and the `torch`, `transformers` and
+`sentence-transformers` packages; without a GPU or those packages the run cells are skipped and the
+notebook only reads saved results from `outputs/deep/`.
+
+Run time: roughly one hour on one GPU for all seeds (an estimate, not measured); under a
+minute when it only reads saved results.
+"""),
+    ("code", """
+import sys, os; os.chdir(os.path.join(os.getcwd(), "..")) if os.path.basename(os.getcwd()) == "notebooks" else None; sys.path.insert(0, "."); import warnings
+import importlib.util
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.metrics import confusion_matrix, precision_recall_curve
+
+from modules import data_helper as dh
+from modules import features as ft
+from modules import eval_helper as ev
+from modules import results_helper as rh
+from modules import deep_runs as dr
+
+DATA = "../data/fake_job_postings.csv"
+"""),
+    ("code", """
+SEED = 0
+SEEDS = [0, 1, 2, 3, 4]
+BERT_SEEDS = [0]  # pilot first: read the seconds per epoch below, then set it to SEEDS
+SPLIT_PATH = "splits/seed0.npz"
+OUT_CLASSICAL = "outputs/classical"
+OUT_DEEP = "outputs/deep"
+GROUPS = ["classical", "deep"]
+
+EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+BERT_MODEL = "distilbert-base-uncased"
+EPOCHS, BATCH_SIZE, MAX_LEN, LR = 3, 16, 256, 2e-5
+
+# Heavy cells run only where the libraries exist AND a GPU is visible (never on a laptop CPU);
+# the heads only need the cached embeddings.
+HAVE_TORCH = all(importlib.util.find_spec(m) for m in ("torch", "transformers", "sentence_transformers"))
+HAVE_GPU = HAVE_TORCH and __import__("torch").cuda.is_available()
+HAVE_EMBEDDINGS = os.path.exists("features/" + EMBED_MODEL.replace("/", "_") + "_emb.npy")
+RUN_EMBED, RUN_BERT = HAVE_GPU, HAVE_GPU
+RUN_HEADS = HAVE_GPU or HAVE_EMBEDDINGS
+print({"torch stack": HAVE_TORCH, "gpu": HAVE_GPU, "cached embeddings": HAVE_EMBEDDINGS})
+
+dh.seed_everything(SEED)
+sns.set_theme(style="whitegrid")
+"""),
+    ("md", """
+## Data and splits
+
+The same cleaned frame and the same saved splits as the classical notebook, so every model
+is scored on identical rows.
+"""),
+    ("code", """
+df = ft.add_engineered_features(dh.clean(dh.load_raw(DATA)))
+print("rows:", len(df), "| fraud:", int(df["fraudulent"].sum()))
+"""),
+    ("md", """
+## Step 1: frozen sentence embeddings
+
+`all-MiniLM-L6-v2` turns each ad (the joined `text` column) into one 384-dimensional vector.
+Nothing is trained here. The vectors are cached in `features/` keyed by `job_id`, so this
+cell is a no-op the second time.
+"""),
+    ("code", """
+if RUN_EMBED:
+    device = dr.resolve_device("auto")
+    dr.print_run_info(device, BATCH_SIZE, MAX_LEN)
+    dr.run_embed(df, device, EMBED_MODEL)
+else:
+    print("skipped: needs a GPU and torch + sentence-transformers")
+"""),
+    ("md", """
+## Step 2: sklearn heads on the frozen embeddings
+
+A logistic regression (C picked on validation PR-AUC) and a small MLP, trained on the cached
+vectors with CPU only. Each is run for all five seeds; the threshold is picked on validation and
+the test rows are scored once.
+"""),
+    ("code", """
+if RUN_HEADS:
+    dr.run_heads(df, SEEDS, OUT_DEEP, EMBED_MODEL)
+else:
+    print("skipped: no cached embeddings here")
+"""),
+    ("md", """
+## Step 3: fine-tune DistilBERT
+
+The whole encoder is trained with a linear classification layer on top: AdamW, learning rate
+2e-5 with warm-up and linear decay, square-root class weights in the loss, bf16 autocast on
+CUDA, and early stopping on validation PR-AUC (the best epoch's weights are restored). Texts
+are truncated to 256 tokens. `BERT_SEEDS` starts as one seed so the epoch time can be read
+before committing to all five.
+"""),
+    ("code", """
+if RUN_BERT:
+    dr.run_bert(df, BERT_SEEDS, OUT_DEEP, device, BERT_MODEL, epochs=EPOCHS,
+                batch_size=BATCH_SIZE, max_len=MAX_LEN, lr=LR)
+else:
+    print("skipped: needs a GPU and torch + transformers")
+"""),
+    ("md", """
+## Training curves of the fine-tuned model
+
+Session 7: read the curve, not only the end number. Per epoch validation PR-AUC and training
+loss, from the `history` stored with each saved run.
+"""),
+    ("code", """
+import glob, json
+rows = []
+for path in sorted(glob.glob(os.path.join(OUT_DEEP, "bert_*_seed*.json"))):
+    with open(path, encoding="utf-8") as f:
+        rec = json.load(f)
+    for h in rec.get("history", []):
+        rows.append({"seed": rec["seed"], **h})
+hist = pd.DataFrame(rows)
+if hist.empty:
+    print("no fine-tuning history found yet")
+else:
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+    for seed, g in hist.groupby("seed"):
+        axes[0].plot(g["epoch"], g["val_pr_auc"], marker="o", label=f"seed {seed}")
+        axes[1].plot(g["epoch"], g["train_loss"], marker="o", label=f"seed {seed}")
+    axes[0].set_title("Validation PR-AUC per epoch"); axes[0].set_xlabel("epoch"); axes[0].set_ylabel("PR-AUC")
+    axes[1].set_title("Training loss per epoch"); axes[1].set_xlabel("epoch"); axes[1].set_ylabel("weighted cross-entropy")
+    axes[0].legend()
+    plt.show()
+    print("seconds per epoch:", hist["seconds"].round(0).tolist())
+"""),
+    ("md", """
+# Final comparison: classical and deep models together
+
+The remaining sections read the saved files of every model found in `outputs/classical/` and
+`outputs/deep/`. Nothing is fitted below.
+"""),
+] + RESULTS + [
+    ("md", """
+## Findings (deep models)
+
+To be written after the full deep runs have been read; the numbers in the tables above are
+the source of truth until then.
+"""),
+]
+
 
 def main():
     """Write the three notebooks, then re-read and parse-check them."""
-    for cells, name in ((NB1, "01_eda.ipynb"),
-                        (NB2, "02_classical_demo.ipynb"),
-                        (NB3, "03_results.ipynb")):
+    for cells, name in ((NB1, "01_eda_preprocessing.ipynb"),
+                        (NB2, "02_classical_ml.ipynb"),
+                        (NB3, "03_deep_learning.ipynb")):
         path = build(cells, name)
         total, n_code = check(path)
         print(f"{path}: {total} cells ({n_code} code, {total - n_code} markdown)")

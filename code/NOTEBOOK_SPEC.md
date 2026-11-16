@@ -71,3 +71,7 @@ results and with any subset of seeds.
 (type, source) tuples), writes them, and prints the list of files and cell counts. Re-running it must overwrite them cleanly.
 Run only that script (it does no heavy work). Final report: files written, cell counts per notebook, and what you did NOT verify
 (execution results).
+
+> **Superseded.** The notebooks were restructured: `01_eda_preprocessing`, `02_classical_ml`, `03_deep_learning`.
+> Runs now happen inside the notebooks via `modules/classical_runs.py` and `modules/deep_runs.py` (the `run_*.py`
+> scripts are gone). The source of truth is `notebooks/build_notebooks.py`.

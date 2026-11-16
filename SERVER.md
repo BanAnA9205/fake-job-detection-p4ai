@@ -18,29 +18,28 @@ nvidia-smi --query-gpu=index,memory.used,memory.total,utilization.gpu --format=c
 export CUDA_VISIBLE_DEVICES=<index of the emptiest GPU>   # DistilBERT, batch 16, 256 tokens, bf16 needs very roughly 4-6 GB (an estimate, not measured)
 ```
 
-## 2. Run, in this order, inside tmux (it survives a dropped ssh connection)
+## 2. Run notebook 03 (inside tmux; it survives a dropped ssh connection)
+All runs happen inside the notebooks; the `.py` files in `code/modules/` are helpers only.
 ```bash
 tmux new -s deep
-cd code && mkdir -p logs && export OMP_NUM_THREADS=8
-# a) cheap: embeddings + the two sklearn heads, all 5 seeds (embedding 17.6k texts once; heads are CPU)
-nice -n 10 python run_deep.py --stage embed --out outputs/deep 2>&1 | tee logs/deep_embed.log
-nice -n 10 python run_deep.py --stage heads --out outputs/deep 2>&1 | tee logs/deep_heads.log
-# b) pilot BERT on ONE seed first and read the per-epoch seconds before launching more
-nice -n 10 python run_deep.py --stage bert --seeds 0 --out outputs/deep 2>&1 | tee logs/deep_bert_seed0.log
-# c) if the timing is acceptable, the remaining seeds (finished runs are skipped automatically)
-nice -n 10 python run_deep.py --stage bert --seeds 1 2 3 4 --out outputs/deep 2>&1 | tee logs/deep_bert_rest.log
+cd code/notebooks && export OMP_NUM_THREADS=8
+nice -n 10 ../.venv/bin/jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=-1 03_deep_learning.ipynb
 ```
-If it is interrupted, rerun the same command: finished (model, seed) pairs are skipped.
-Out-of-memory: lower `--batch-size` to 8 (or `--max-len` to 192). Do not use a GPU whose free memory is under ~6 GB.
+(or open it with `jupyter lab` over an ssh tunnel and run cell by cell). The notebook embeds the texts, fits the two
+heads for all 5 seeds, and fine-tunes DistilBERT for the seeds in `BERT_SEEDS`.
+- **Pilot first:** `BERT_SEEDS = [0]` is the default. Read the "seconds per epoch" line, then set `BERT_SEEDS = SEEDS` and rerun;
+  finished (model, seed) pairs are skipped, as are cached embeddings.
+- Out-of-memory: lower `BATCH_SIZE` to 8 (or `MAX_LEN` to 192) in the constants cell. Do not use a GPU with under ~6 GB free.
+- Heavy cells only run when a GPU and torch + transformers + sentence-transformers are present, so the same notebook is safe on a laptop.
 
 ## 3. Send results back
 ```bash
-cd .. && git add code/outputs/deep && git commit -m "Deep results: embeddings heads and DistilBERT" && git push
+cd ../.. && git add code/outputs/deep && git commit -m "Deep results: embeddings heads and DistilBERT" && git push
 ```
-Only the small json/npz result files are committed; embeddings (`code/features/*.npy`) and logs stay on the server.
+Commit the executed notebook too if you like. Only the small json/npz result files are committed; embeddings (`code/features/*.npy`) and logs stay on the server.
 
 ## 4. Back on the laptop
-`git pull`, then run `code/notebooks/03_results.ipynb` (it picks up `outputs/deep/` automatically).
+`git pull`, then re-run `code/notebooks/03_deep_learning.ipynb` (with no GPU it only reads `outputs/deep/`).
 
 ## What was and was not verified before you run this
 - Verified on the laptop with synthetic data and a tiny random BERT: the training loop, early stopping and best-weight restore,

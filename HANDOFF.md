@@ -40,9 +40,9 @@ Read this, then `docs/spec.md`, `code/CODE_SPEC.md` and the code. Do not trust n
 - `modules/eval_helper.py`, `explain_helper.py`, `results_helper.py`: metrics, threshold on validation, tables, plots,
   linear coefficients, tree importances and rules, permutation importance, error reading, one shared results format.
 - `modules/deep_helper.py` (`embed_texts`, cached), `modules/finetune_helper.py` (plain PyTorch fine-tuning loop).
-- `run_classical.py` (done, results committed) and `run_deep.py` (embeddings, sklearn heads on embeddings, BERT; NOT yet run on
-  real data). Both write `outputs/<group>/<model>_seed<N>.json/.npz`; the notebook `03_results` reads them.
-- `notebooks/`: `01_eda`, `02_classical_demo` (validation only), `03_results` (reads saved results), built by `build_notebooks.py`
+- Runs happen inside the notebooks, which call `modules/classical_runs.py` (done, results committed) and `modules/deep_runs.py`
+  (embeddings, heads, BERT; NOT yet run on real data). Both write `outputs/<group>/<model>_seed<N>.json/.npz`.
+- `notebooks/`: `01_eda_preprocessing`, `02_classical_ml`, `03_deep_learning` (final classical+deep comparison), built by `build_notebooks.py`
   and executed with saved outputs. Do not rebuild casually: rebuilding wipes the saved outputs and the findings cells.
 - `tests/`: plain-assert scripts, all pass on the laptop (Python 3.14, scikit-learn 1.9.1, CPU torch for the tiny BERT smoke test).
 - `SERVER.md`: step-by-step commands for the GPU server. `CODE_SPEC.md`, `DEEP_SPEC.md`, `NOTEBOOK_SPEC.md`: the contracts
@@ -65,7 +65,7 @@ US 6.9%); the country and "missing company profile" signals may reflect how the 
 
 ## Open issues / next steps
 1. Run `SERVER.md` on NRC: embeddings, sklearn heads, then DistilBERT (one seed first to measure the real time). Push the small
-   result files back; then re-run `03_results.ipynb` locally (it picks up `outputs/deep/`), and add a findings cell.
+   result files back; then re-run `03_deep_learning.ipynb` locally (it reads `outputs/deep/`), and add a findings cell.
 2. Not yet verified: downloading the real models, bf16 on CUDA, memory/time of the BERT run (all estimates).
 3. Ordinal level orders in `features.py` are judgment calls ("Not Applicable" below "Internship", etc.).
 4. Two false negatives looked like the same posting with different capitalisation (possible near-duplicates that exact dedup
