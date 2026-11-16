@@ -1073,18 +1073,29 @@ Numbers are the means over the 5 split seeds in the first table, test split.
     ("md", """
 ## Findings (deep models)
 
-Numbers are test PR-AUC, means over the 5 split seeds unless stated; DistilBERT has one seed.
+Numbers are test PR-AUC, means over the 5 split seeds (DistilBERT: 5 epochs, batch 128, texts cut
+at 256 tokens, best epoch on validation kept).
 
 - Frozen MiniLM embeddings are clearly worse than TF-IDF: the MLP head reaches 0.63 and the
-  logistic regression head 0.52, against 0.82 to 0.85 for the TF-IDF models. A single 384-number
-  sentence vector loses what the sparse word features keep (a guess, not tested).
-- Fine-tuned DistilBERT (seed 0, 5 epochs, batch 128, texts cut at 256 tokens) scores test
-  PR-AUC 0.798 (validation 0.856). The TF-IDF models have a spread of about 0.06 to 0.08 across
-  seeds, so one seed cannot rank DistilBERT against them; seeds 1 to 4 are needed.
-- The earlier pilot on the same split (3 epochs, batch 16) scored 0.820. The two settings differ
-  by less than the seed spread, so this is not evidence that either is better.
-- Validation PR-AUC rose every epoch (0.61, 0.81, 0.85, 0.85, 0.86) and nearly flattened at
-  the end, so more epochs would add little.
+  logistic regression head 0.52, against 0.82 to 0.85 for the TF-IDF models. DistilBERT beats the
+  MLP head on all 5 seeds, by 0.20 on average. A single 384-number sentence vector loses what the
+  sparse word features keep (a guess, not tested).
+- Fine-tuned DistilBERT reaches 0.831 (std 0.066), between logistic regression with TF-IDF (0.821)
+  and the best classical models (BM25 logistic regression 0.847, MLP 0.846). It does not clearly
+  beat the classical models: per seed it is ahead of BM25 logistic regression on 1 seed of 5 (mean
+  difference -0.016, std 0.016) and of the TF-IDF MLP on 1 of 5 (-0.015, std 0.034), and ahead of plain
+  TF-IDF logistic regression on 2 of 5 (+0.010, std 0.037). With 5 seeds these gaps are too small
+  to rank the models.
+- All the TF-IDF models and DistilBERT move together across seeds (seed 2 is hard for every
+  model, seeds 3 and 4 are easy), so much of the spread likely comes from which ads land in the test
+  split rather than from the model (not tested separately).
+- Cost per seed (mean seconds in the fit-time table): DistilBERT about 7 minutes on one GPU; the
+  tuned TF-IDF logistic regressions 1 to 1.5 minutes; the tuned TF-IDF MLP about 7 minutes. The
+  logistic regressions match DistilBERT's PR-AUC at a fraction of the time.
+- The best epoch on validation varied: epoch 5 for seeds 0, 3 and 4, epoch 4 for seed 1, epoch 3
+  for seed 2. Validation PR-AUC flattens after epoch 3 to 4, so more epochs would add little.
+- The validation-chosen threshold of DistilBERT is unstable (0.26 to 0.95 across seeds), which
+  affects its F1 (0.77 on average) but not PR-AUC.
 - Not measured: how many ads exceed 256 tokens, so the truncation cost is unknown.
 """),
 ]
