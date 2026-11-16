@@ -1,0 +1,36 @@
+{
+  "model": "emb_mlp",
+  "group": "deep",
+  "seed": 4,
+  "thr": 0.43159791827201843,
+  "val": {
+    "precision": 0.7419354838709677,
+    "recall": 0.5380116959064327,
+    "f1": 0.6237288135593221,
+    "tp": 92,
+    "fp": 32,
+    "fn": 79,
+    "tn": 3317,
+    "pr_auc": 0.6466155360641986,
+    "roc_auc": 0.9184394748192266
+  },
+  "test": {
+    "precision": 0.7289719626168224,
+    "recall": 0.45614035087719296,
+    "f1": 0.5611510791366906,
+    "tp": 78,
+    "fp": 29,
+    "fn": 93,
+    "tn": 3320,
+    "pr_auc": 0.5839223608439137,
+    "roc_auc": 0.9201943846378163
+  },
+  "train_pr_auc": 0.7792418108552164,
+  "best_params": {
+    "hidden_layer_sizes": [
+      128
+    ]
+  },
+  "seconds": 2.949038028717041,
+  "notes": "frozen embeddings with a sklearn head; threshold on validation"
+}

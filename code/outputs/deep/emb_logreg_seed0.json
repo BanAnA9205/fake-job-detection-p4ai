@@ -1,0 +1,34 @@
+{
+  "model": "emb_logreg",
+  "group": "deep",
+  "seed": 0,
+  "thr": 0.8971566755576642,
+  "val": {
+    "precision": 0.5852272727272727,
+    "recall": 0.6023391812865497,
+    "f1": 0.5936599423631124,
+    "tp": 103,
+    "fp": 73,
+    "fn": 68,
+    "tn": 3276,
+    "pr_auc": 0.5756087813702505,
+    "roc_auc": 0.9355659977055208
+  },
+  "test": {
+    "precision": 0.5211267605633803,
+    "recall": 0.4327485380116959,
+    "f1": 0.4728434504792332,
+    "tp": 74,
+    "fp": 68,
+    "fn": 97,
+    "tn": 3281,
+    "pr_auc": 0.50564947281341,
+    "roc_auc": 0.9202258158584476
+  },
+  "train_pr_auc": 0.7325908849771321,
+  "best_params": {
+    "C": 10.0
+  },
+  "seconds": 18.419774055480957,
+  "notes": "frozen embeddings with a sklearn head; threshold on validation"
+}

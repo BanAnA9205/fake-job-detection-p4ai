@@ -1,0 +1,59 @@
+{
+  "model": "bert_distilbert-base-uncased",
+  "group": "deep",
+  "seed": 0,
+  "thr": 0.9304582476615906,
+  "val": {
+    "precision": 0.8993288590604027,
+    "recall": 0.783625730994152,
+    "f1": 0.8375,
+    "tp": 134,
+    "fp": 15,
+    "fn": 37,
+    "tn": 3334,
+    "pr_auc": 0.8559705489222179,
+    "roc_auc": 0.9685382212373773
+  },
+  "test": {
+    "precision": 0.8823529411764706,
+    "recall": 0.7017543859649122,
+    "f1": 0.7817589576547231,
+    "tp": 120,
+    "fp": 16,
+    "fn": 51,
+    "tn": 3333,
+    "pr_auc": 0.8204858845808259,
+    "roc_auc": 0.9701377211317335
+  },
+  "train_pr_auc": 0.9899579115004129,
+  "best_params": {
+    "model_name": "distilbert-base-uncased",
+    "lr": 2e-05,
+    "epochs": 3,
+    "batch_size": 16,
+    "max_len": 256,
+    "class_weight": "sqrt"
+  },
+  "seconds": 640.3290736675262,
+  "notes": "fine-tuned encoder with sqrt class weights; best epoch on validation",
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 0.33320878910857155,
+      "val_pr_auc": 0.7516702763689039,
+      "seconds": 179.50892686843872
+    },
+    {
+      "epoch": 2,
+      "train_loss": 0.1409970165614188,
+      "val_pr_auc": 0.8439948987844749,
+      "seconds": 181.78116178512573
+    },
+    {
+      "epoch": 3,
+      "train_loss": 0.06656892667833222,
+      "val_pr_auc": 0.8559705489222179,
+      "seconds": 183.15811038017273
+    }
+  ]
+}
