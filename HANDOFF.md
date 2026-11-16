@@ -45,7 +45,7 @@ Read this, then `docs/spec.md`, `code/CODE_SPEC.md` and the code. Do not trust n
 - `notebooks/`: `01_eda_preprocessing`, `02_classical_ml`, `03_deep_learning` (final classical+deep comparison), built by `build_notebooks.py`
   and executed with saved outputs. Do not rebuild casually: rebuilding wipes the saved outputs and the findings cells.
 - `tests/`: plain-assert scripts, all pass on the laptop (Python 3.14, scikit-learn 1.9.1, CPU torch for the tiny BERT smoke test).
-- `SERVER.md`: step-by-step commands for the GPU server. `CODE_SPEC.md`, `DEEP_SPEC.md`, `NOTEBOOK_SPEC.md`: the contracts
+- `CODE_SPEC.md`, `DEEP_SPEC.md`, `NOTEBOOK_SPEC.md`: the contracts
   the modules were written against (the agents' safety rules in them were for the laptop).
 
 ## Measured (classical, 5 split seeds 0-4, tuned on train with 3-fold grouped CV, threshold chosen on validation, TEST set)
@@ -64,7 +64,7 @@ Dataset observation (unverified hypothesis): fraud rate differs sharply by count
 US 6.9%); the country and "missing company profile" signals may reflect how the dataset was collected rather than fraud itself.
 
 ## Open issues / next steps
-1. Run `SERVER.md` on NRC: embeddings, sklearn heads, then DistilBERT (one seed first to measure the real time). Push the small
+1. Run `code/notebooks/03_deep_learning.ipynb` on NRC: embeddings, sklearn heads, then DistilBERT (one seed first to measure the real time). Push the small
    result files back; then re-run `03_deep_learning.ipynb` locally (it reads `outputs/deep/`), and add a findings cell.
 2. Not yet verified: downloading the real models, bf16 on CUDA, memory/time of the BERT run (all estimates).
 3. Ordinal level orders in `features.py` are judgment calls ("Not Applicable" below "Internship", etc.).
