@@ -3,7 +3,7 @@
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
-# third-party papers (copyrighted; download again, see HANDOFF.md)
+# third-party papers (copyrighted; download them again if needed)
 surveys/
 # heavy outputs; regenerate or copy back with rsync
 code/features/
