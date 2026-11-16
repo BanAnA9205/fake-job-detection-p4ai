@@ -1012,7 +1012,7 @@ Session 7 order: first freeze a pretrained encoder and train only a small head o
 embeddings (cheap, cached), then fine-tune the whole encoder (expensive). Both are
 compared with the classical models of notebook 02 on the same five splits, scored once
 on test per (model, seed). Heavy cells need a GPU and the `torch`, `transformers` and
-`sentence-transformers` packages; without a GPU or those packages the run cells are skipped and the
+`sentence-transformers` packages; the run cells are skipped unless `ON_GPU_SERVER = True` (set it on the server only) and the
 notebook only reads saved results from `outputs/deep/`.
 
 Run time: roughly one hour on one GPU for all seeds (an estimate, not measured); under a
@@ -1049,14 +1049,19 @@ EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 BERT_MODEL = "distilbert-base-uncased"
 EPOCHS, BATCH_SIZE, MAX_LEN, LR = 3, 16, 256, 2e-5
 
-# Heavy cells run only where the libraries exist AND a GPU is visible (never on a laptop CPU);
-# the heads only need the cached embeddings.
+# SAFETY: the embedding and fine-tuning cells are heavy GPU work. They run only when this flag is
+# True, and it must stay False on the laptop. Set it to True on the GPU server, nowhere else.
+ON_GPU_SERVER = False
+
+# Libraries present? (a missing one would make the heavy cells fail, not skip)
 HAVE_TORCH = all(importlib.util.find_spec(m) for m in ("torch", "transformers", "sentence_transformers"))
-HAVE_GPU = HAVE_TORCH and __import__("torch").cuda.is_available()
 HAVE_EMBEDDINGS = os.path.exists("features/" + EMBED_MODEL.replace("/", "_") + "_emb.npy")
-RUN_EMBED, RUN_BERT = HAVE_GPU, HAVE_GPU
-RUN_HEADS = HAVE_GPU or HAVE_EMBEDDINGS
-print({"torch stack": HAVE_TORCH, "gpu": HAVE_GPU, "cached embeddings": HAVE_EMBEDDINGS})
+
+# Heavy cells need the explicit opt-in AND the libraries; the sklearn heads are light (CPU) and
+# only need the cached embeddings.
+RUN_EMBED = RUN_BERT = ON_GPU_SERVER and HAVE_TORCH
+RUN_HEADS = RUN_EMBED or HAVE_EMBEDDINGS
+print({"ON_GPU_SERVER": ON_GPU_SERVER, "torch stack": HAVE_TORCH, "cached embeddings": HAVE_EMBEDDINGS})
 
 dh.seed_everything(SEED)
 sns.set_theme(style="whitegrid")
@@ -1087,7 +1092,7 @@ if RUN_EMBED:
     # Encode every ad once; the result is cached in features/.
     dr.run_embed(df, device, EMBED_MODEL)
 else:
-    print("skipped: needs a GPU and torch + sentence-transformers")
+    print("skipped: set ON_GPU_SERVER = True (GPU server only) and install torch + sentence-transformers")
 """),
     ("md", """
 ## Step 2: sklearn heads on the frozen embeddings
@@ -1116,7 +1121,7 @@ if RUN_BERT:
     dr.run_bert(df, BERT_SEEDS, OUT_DEEP, device, BERT_MODEL, epochs=EPOCHS,
                 batch_size=BATCH_SIZE, max_len=MAX_LEN, lr=LR)
 else:
-    print("skipped: needs a GPU and torch + transformers")
+    print("skipped: set ON_GPU_SERVER = True (GPU server only) and install torch + transformers")
 """),
     ("md", """
 ## Training curves of the fine-tuned model
