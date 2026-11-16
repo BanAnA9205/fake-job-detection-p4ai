@@ -28,15 +28,6 @@ EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 BERT_MODEL = "distilbert-base-uncased"
 
 
-def resolve_device(name):
-    """"auto" means cuda when it exists, so the same command works on laptop and GPU box."""
-    if name != "auto":
-        return name
-    import torch
-
-    return "cuda" if torch.cuda.is_available() else "cpu"
-
-
 def print_splits(splits, y, seed):
     """Print size and class balance of every split, as the course requires."""
     print(f"seed {seed}:")

@@ -1048,6 +1048,7 @@ GROUPS = ["classical", "deep"]
 EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 BERT_MODEL = "distilbert-base-uncased"
 EPOCHS, BATCH_SIZE, MAX_LEN, LR = 3, 16, 256, 2e-5
+DEVICE = "cuda:0"  # which GPU to use; the server is shared, so pick an emptier one (nvidia-smi), e.g. "cuda:1"
 
 # SAFETY: the embedding and fine-tuning cells are heavy GPU work. They run only when this flag is
 # True, and it must stay False on the laptop. Set it to True on the GPU server, nowhere else.
@@ -1086,8 +1087,7 @@ cell is a no-op the second time.
     ("code", """
 if RUN_EMBED:
     # Encode every ad once; the result is cached in features/.
-    device = dr.resolve_device("auto")
-    dr.run_embed(df, device, EMBED_MODEL)
+    dr.run_embed(df, DEVICE, EMBED_MODEL)
 else:
     print("skipped: set ON_GPU_SERVER = True (GPU server only) and install torch + sentence-transformers")
 """),
@@ -1115,7 +1115,7 @@ before committing to all five.
 """),
     ("code", """
 if RUN_BERT:
-    dr.run_bert(df, BERT_SEEDS, OUT_DEEP, device, BERT_MODEL, epochs=EPOCHS,
+    dr.run_bert(df, BERT_SEEDS, OUT_DEEP, DEVICE, BERT_MODEL, epochs=EPOCHS,
                 batch_size=BATCH_SIZE, max_len=MAX_LEN, lr=LR)
 else:
     print("skipped: set ON_GPU_SERVER = True (GPU server only) and install torch + transformers")
