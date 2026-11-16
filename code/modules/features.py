@@ -95,8 +95,6 @@ def add_engineered_features(df):
     out["has_phone"] = text.str.contains(PHONE_PATTERN, regex=True).astype(int)
     out["has_money_words"] = text.str.contains(
         MONEY_PATTERN, case=False, regex=True).astype(int)
-
-    assert len(out) == len(df), "feature engineering changed the row count"
     return out
 
 

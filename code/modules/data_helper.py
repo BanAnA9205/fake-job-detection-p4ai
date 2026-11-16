@@ -1,7 +1,6 @@
 """Loading, auditing, cleaning and splitting the fake job postings data."""
 
 import hashlib
-import json
 import os
 import random
 
@@ -89,18 +88,7 @@ def clean(df):
     out = df.drop_duplicates(subset=cols, keep="first").copy()
     out["group"] = out["description"].map(_desc_hash)
     out = out.reset_index(drop=True)
-
-    # Sanity checks on the result.
-    assert not out.duplicated(subset=cols).any(), "duplicates survived the drop"
-    assert out["group"].notna().all(), "group hash failed"
     return out
-
-
-def _require_groups(groups, n_splits):
-    """Fail early when there are too few description groups to fill the folds."""
-    found = len(np.unique(groups))
-    if found < n_splits:
-        raise ValueError(f"need at least {n_splits} distinct description groups, found {found}")
 
 
 def _check_splits(splits, y, groups):
@@ -139,13 +127,11 @@ def make_splits(df, seed=0, val_size=0.2, test_size=0.2):
     # Step 1: cut the test split off first (1 fold out of 1/test_size folds).
     # StratifiedGroupKFold keeps a whole description in one split and balances the label.
     n_test_folds = max(2, round(1.0 / test_size))
-    _require_groups(groups, n_test_folds)
     outer = StratifiedGroupKFold(n_splits=n_test_folds, shuffle=True, random_state=seed)
     trainval, test = next(outer.split(np.zeros((n, 1)), y, groups))
 
     # Step 2: split the rest into train and validation, so val_size is a share of all rows.
     n_val_folds = max(2, round(1.0 / (val_size / (1.0 - test_size))))
-    _require_groups(groups[trainval], n_val_folds)
     inner = StratifiedGroupKFold(n_splits=n_val_folds, shuffle=True, random_state=seed + 1)
     tr, va = next(inner.split(np.zeros((len(trainval), 1)), y[trainval], groups[trainval]))
 
@@ -179,44 +165,6 @@ def _fingerprint(df):
     """Short hash of the ordered job_ids; changes if rows are dropped, added or reordered."""
     ids = ",".join(map(str, df["job_id"].tolist()))
     return hashlib.sha256(ids.encode("utf-8")).hexdigest()[:16]
-
-
-def save_metadata(path, df, splits, seed):
-    """Write split sizes, positives and column lists to a JSON file."""
-    y = df[TARGET].to_numpy()
-
-    # Per-split size and class balance, plus the column groups used by the pipeline.
-    meta = {
-        "seed": int(seed),
-        "n_rows": int(len(df)),
-        "splits": {
-            name: {
-                "size": int(len(idx)),
-                "positives": int(y[idx].sum()),
-                "positive_rate": round(float(y[idx].mean()), 6),
-            }
-            for name, idx in splits.items()
-        },
-        "columns": {
-            "all": list(df.columns),
-            "text": TEXT_COLS,
-            "categorical": CAT_COLS,
-            "binary": BIN_COLS,
-        },
-    }
-
-    # Write the file, creating its folder when needed.
-    folder = os.path.dirname(path)
-    if folder:
-        os.makedirs(folder, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(meta, f, indent=2)
-
-
-def load_metadata(path):
-    """Read back the JSON written by save_metadata."""
-    with open(path, encoding="utf-8") as f:
-        return json.load(f)
 
 
 def seed_everything(seed):

@@ -19,10 +19,8 @@ from modules.data_helper import (
     TEXT_COLS,
     audit,
     clean,
-    load_metadata,
     load_raw,
     make_splits,
-    save_metadata,
     seed_everything,
 )
 
@@ -195,27 +193,6 @@ def test_make_splits():
 def test_make_splits_rejects_tiny_data():
     small = clean(make_frame(n_groups=3, per_group=4, pos_per_group=1))
     expect_error(ValueError, lambda: make_splits(small))
-
-
-def test_metadata_roundtrip():
-    cleaned = clean(make_frame())
-    splits = make_splits(cleaned, seed=5)
-    with tempfile.TemporaryDirectory() as tmp:
-        path = os.path.join(tmp, "nested", "metadata.json")
-        save_metadata(path, cleaned, splits, seed=5)
-        meta = load_metadata(path)
-    assert meta["seed"] == 5
-    assert meta["n_rows"] == 200
-    assert set(meta["splits"]) == {"train", "val", "test"}
-    assert sum(meta["splits"][k]["size"] for k in meta["splits"]) == 200
-    y = cleaned["fraudulent"].to_numpy()
-    for name, idx in splits.items():
-        assert meta["splits"][name]["positives"] == int(y[idx].sum())
-        assert meta["splits"][name]["size"] == len(idx)
-    assert meta["columns"]["text"] == TEXT_COLS
-    assert meta["columns"]["categorical"] == CAT_COLS
-    assert meta["columns"]["binary"] == BIN_COLS
-    assert meta["columns"]["all"][-1] == "group"
 
 
 def test_seed_everything():

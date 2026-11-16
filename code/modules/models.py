@@ -86,7 +86,6 @@ def tune(pipe, grid, X, y, groups, n_iter=8, cv=5, scoring="average_precision",
         cv=splitter,
         random_state=seed,
         n_jobs=n_jobs,
-        refit=True,
         error_score="raise",
     )
 

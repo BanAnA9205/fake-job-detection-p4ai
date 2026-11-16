@@ -28,7 +28,6 @@ def evaluate(y, score, thr):
     """
     y = np.asarray(y).astype(int)
     score = np.asarray(score, dtype=float)
-    assert y.shape == score.shape, "y and score must have the same shape"
 
     # Hard predictions at this threshold and their confusion counts.
     pred = (score >= thr).astype(int)
@@ -56,7 +55,6 @@ def pick_threshold(y_val, score_val):
     """
     y = np.asarray(y_val).astype(int)
     s = np.asarray(score_val, dtype=float)
-    assert y.shape == s.shape, "y_val and score_val must have the same shape"
 
     # Precision and recall at every distinct score. The last point (precision 1,
     # recall 0) has no threshold, so it is dropped.

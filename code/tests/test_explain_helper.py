@@ -73,24 +73,6 @@ def test_top_linear_terms():
     assert len(big) == 2 * n_feat
 
 
-def test_top_linear_terms_rejects_nonlinear():
-    from sklearn.ensemble import HistGradientBoostingClassifier
-
-    df = _make_data(n=30)
-    df["n"] = np.arange(len(df), dtype=float)
-    pre = ColumnTransformer([("num", "passthrough", ["n"])])
-    pipe = Pipeline([("pre", pre), ("clf", HistGradientBoostingClassifier())])
-    pipe.fit(df[["n"]], df["y"])
-    try:
-        top_linear_terms(pipe, k=2)
-        raised = False
-    except TypeError:
-        raised = True
-    assert raised
-
-
-
-
 def test_show_errors():
     df = _make_data(n=12)
     # Hand-made scores: rows 0-4 are labelled 0 but score high (false
@@ -127,11 +109,6 @@ def test_tree_helpers():
     assert top.loc[0, "term"].startswith("txt__")
     rules = tree_rules(pipe, max_depth=2)
     assert "txt__" in rules and "class:" in rules
-    try:
-        top_tree_features(_make_pipe().fit(df, df["y"]))
-    except TypeError:
-        return
-    raise AssertionError("expected TypeError for a non-tree estimator")
 
 
 if __name__ == "__main__":

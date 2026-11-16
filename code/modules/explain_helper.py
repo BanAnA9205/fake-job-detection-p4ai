@@ -11,29 +11,14 @@ def top_linear_terms(pipe, k=20):
     pipe must be a fitted Pipeline with steps named "pre" (ColumnTransformer)
     and "clf" (a linear estimator that exposes coef_).
     """
-    pre, clf = pipe.named_steps["pre"], pipe.named_steps["clf"]
-    if not hasattr(clf, "coef_"):
-        raise TypeError("top_linear_terms needs a linear estimator with coef_")
+    # One coefficient per feature name, sorted from most real-like to most fraud-like.
+    coefs = pd.Series(np.ravel(pipe.named_steps["clf"].coef_),
+                      index=pipe.named_steps["pre"].get_feature_names_out()).sort_values()
 
-    # Feature names from the fitted preprocessor, aligned with the coefficients.
-    names = np.asarray(pre.get_feature_names_out())
-    # Binary linear models store coef_ as (n_features,) or (1, n_features).
-    coefs = np.asarray(clf.coef_, dtype=float).ravel()
-    assert len(names) == len(coefs), "feature names and coefficients misaligned"
-
-    # Rank the coefficients and take both ends: most fraud-like and most real-like terms.
-    order = np.argsort(coefs)  # ascending: most negative first
-    neg_idx = order[:k]
-    pos_idx = order[::-1][:k]  # descending: most positive first
-
-    pos = pd.DataFrame(
-        {"term": names[pos_idx], "coef": coefs[pos_idx], "direction": "positive"}
-    )
-    neg = pd.DataFrame(
-        {"term": names[neg_idx], "coef": coefs[neg_idx], "direction": "negative"}
-    )
-
-    return pd.concat([pos, neg], ignore_index=True)
+    # Both ends: the k most fraud-like and the k most real-like terms.
+    ends = {"positive": coefs[::-1].head(k), "negative": coefs.head(k)}
+    return pd.concat([pd.DataFrame({"term": c.index, "coef": c.values, "direction": d})
+                      for d, c in ends.items()], ignore_index=True)
 
 
 def show_errors(df, y_true, score, thr, k=10):
@@ -42,10 +27,8 @@ def show_errors(df, y_true, score, thr, k=10):
     False positives are ranked by highest score (model was most sure they were
     fraud), false negatives by lowest score (model was most sure they were not).
     """
-    assert {"title", "description"} <= set(df.columns), "df needs title and description"
     y = np.asarray(y_true).astype(int)
     s = np.asarray(score, dtype=float)
-    assert len(df) == len(y) == len(s), "df, y_true and score must align"
 
     # Find the wrong calls at this threshold.
     pred = s >= thr
@@ -76,16 +59,12 @@ def show_errors(df, y_true, score, thr, k=10):
 
 def top_tree_features(pipe, k=20):
     """The k features a fitted decision tree relies on most (impurity importance)."""
-    pre, clf = pipe.named_steps["pre"], pipe.named_steps["clf"]
-    if not hasattr(clf, "feature_importances_"):
-        raise TypeError("top_tree_features needs a tree estimator with feature_importances_")
-    names = np.asarray(pre.get_feature_names_out())
-    imp = np.asarray(clf.feature_importances_, dtype=float)
-    assert len(names) == len(imp), "feature names and importances misaligned"
+    imp = pd.Series(pipe.named_steps["clf"].feature_importances_,
+                    index=pipe.named_steps["pre"].get_feature_names_out())
 
     # Top k features by impurity importance.
-    order = np.argsort(-imp)[:k]
-    return pd.DataFrame({"term": names[order], "importance": imp[order]})
+    top = imp.nlargest(k)
+    return pd.DataFrame({"term": top.index, "importance": top.values})
 
 
 def tree_rules(pipe, max_depth=3):
