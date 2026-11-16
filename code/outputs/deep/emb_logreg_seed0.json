@@ -29,6 +29,6 @@
   "best_params": {
     "C": 10.0
   },
-  "seconds": 0.46709680557250977,
+  "seconds": 1.6657230854034424,
   "notes": "frozen embeddings with a sklearn head; threshold on validation"
 }
