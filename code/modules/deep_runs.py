@@ -37,17 +37,6 @@ def resolve_device(name):
     return "cuda" if torch.cuda.is_available() else "cpu"
 
 
-def print_run_info(device, batch_size, max_len):
-    """Report the device and batch settings before any heavy work starts."""
-    print(f"device: {device}")
-    if str(device).startswith("cuda"):
-        import torch
-
-        free, total = torch.cuda.mem_get_info()
-        print(f"gpu: {torch.cuda.get_device_name(0)}; free {free / 1e9:.1f} of {total / 1e9:.1f} GB")
-    print(f"batch size: {batch_size}; max sequence length: {max_len}")
-
-
 def print_splits(splits, y, seed):
     """Print size and class balance of every split, as the course requires."""
     print(f"seed {seed}:")

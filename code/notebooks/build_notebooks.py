@@ -1085,11 +1085,8 @@ cell is a no-op the second time.
 """),
     ("code", """
 if RUN_EMBED:
-    # Report the GPU and batch settings before the heavy work starts.
-    device = dr.resolve_device("auto")
-    dr.print_run_info(device, BATCH_SIZE, MAX_LEN)
-
     # Encode every ad once; the result is cached in features/.
+    device = dr.resolve_device("auto")
     dr.run_embed(df, device, EMBED_MODEL)
 else:
     print("skipped: set ON_GPU_SERVER = True (GPU server only) and install torch + sentence-transformers")
