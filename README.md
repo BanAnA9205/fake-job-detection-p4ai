@@ -13,7 +13,6 @@ Deep branch: frozen sentence embeddings with LR/MLP heads, and a fine-tuned Dist
 - `code/tests/`                 plain-assert tests on synthetic data (run as scripts)
 - `code/*_SPEC.md`              the contracts the modules were written against
 - `docs/`                       assignment spec and the literature review draft
-- `HANDOFF.md`                  full project state for a new session (read this first)
 
 Setup: `python -m venv .venv && .venv/bin/pip install -r code/requirements.txt`, then run tests with
 `cd code && for t in tests/test_*.py; do ../.venv/bin/python $t; done` (adjust the venv path).
