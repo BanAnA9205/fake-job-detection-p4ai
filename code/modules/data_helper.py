@@ -3,6 +3,7 @@
 import hashlib
 import os
 import random
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -152,24 +153,49 @@ def save_splits(path, splits, df):
              fingerprint=_fingerprint(df))
 
 
-def load_splits(path, df):
-    """Load saved indices and check they belong to this exact cleaned data frame."""
-    z = np.load(path)
+def load_splits(path, df, allow_legacy=True):
+    """Verify saved positional splits, labels, group disjointness and data identity.
 
-    # Refuse indices made for a different cleaned frame (rows dropped, added or reordered).
-    assert str(z["fingerprint"]) == _fingerprint(df), "splits were made for different data; rebuild them"
-    return {k: z[k] for k in ("train", "val", "test")}
+    Older committed split files contain only an ID-based fingerprint. We allow
+    those for historical reproducibility with an explicit warning and re-check
+    their grouping and balance. Set allow_legacy=False for strict validation.
+    """
+    with np.load(path, allow_pickle=False) as z:
+        signature = str(z["fingerprint"])
+        splits = {k: z[k] for k in ("train", "val", "test")}
+    if signature != _fingerprint(df):
+        if not allow_legacy or signature != _legacy_fingerprint(df):
+            raise ValueError("split data fingerprint mismatch; rebuild the splits")
+        warnings.warn(
+            "Legacy ID-only split fingerprint: group/balance checks pass, but original "
+            "row contents cannot be verified. Regenerate for strict provenance.",
+            UserWarning, stacklevel=2,
+        )
+    if "group" not in df.columns:
+        raise ValueError("clean() must run before loading grouped splits")
+    _check_splits(splits, df[TARGET].to_numpy(), df["group"].to_numpy())
+    return splits
 
 
-def _fingerprint(df):
-    """Short hash of the ordered job_ids; changes if rows are dropped, added or reordered."""
+def _legacy_fingerprint(df):
     ids = ",".join(map(str, df["job_id"].tolist()))
     return hashlib.sha256(ids.encode("utf-8")).hexdigest()[:16]
 
 
+def _fingerprint(df):
+    """Hash all ordered data values (including labels and text), not just job IDs."""
+    data = pd.util.hash_pandas_object(df, index=False).to_numpy().tobytes()
+    h = hashlib.sha256()
+    h.update(repr(list(df.columns)).encode("utf-8"))
+    h.update(repr([str(v) for v in df.dtypes]).encode("utf-8"))
+    h.update(data)
+    return h.hexdigest()[:24]
+
+
 def seed_everything(seed):
     """Seed Python and numpy, plus torch when it happens to be installed."""
-    # Python, numpy and hash-based ordering.
+    # Python + numpy RNG. PYTHONHASHSEED must be set before process startup to
+    # control interpreter hash randomization; setting it here documents intent.
     random.seed(seed)
     np.random.seed(seed)
     os.environ["PYTHONHASHSEED"] = str(seed)

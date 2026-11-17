@@ -39,3 +39,8 @@ GPU execution is opt-in using `P4AI_ENABLE_GPU=1` and optionally
 `P4AI_DEVICE=cuda:0` (or another valid device), not a hardcoded server GPU.
 Rebuilding notebooks with `python code/notebooks/build_notebooks.py` overwrites
 their saved outputs.
+
+New split files hash every ordered field and target label. The original committed
+`splits/seed*.npz` files use legacy ID-only fingerprints: loading them emits a
+warning and re-checks group disjointness and class balance, but cannot establish
+full original-data integrity. Strict callers can set `allow_legacy=False`.

@@ -22,7 +22,7 @@ def get_splits(df, seed, split_dir="splits"):
     """Load the saved split for this seed, or create and save it (same split on every machine)."""
     path = os.path.join(split_dir, f"seed{seed}.npz")
     if os.path.exists(path):
-        return dh.load_splits(path, df)
+        return dh.load_splits(path, df, allow_legacy=True)  # historical split compatibility
     splits = dh.make_splits(df, seed=seed)
     dh.save_splits(path, splits, df)
     return splits

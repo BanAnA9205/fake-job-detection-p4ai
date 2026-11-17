@@ -21,6 +21,8 @@ from modules.data_helper import (
     clean,
     load_raw,
     make_splits,
+    save_splits,
+    load_splits,
     seed_everything,
 )
 
@@ -193,6 +195,23 @@ def test_make_splits():
 def test_make_splits_rejects_tiny_data():
     small = clean(make_frame(n_groups=3, per_group=4, pos_per_group=1))
     expect_error(ValueError, lambda: make_splits(small))
+
+
+def test_split_fingerprint_checks_data_and_labels():
+    """Changing a field or label with the same job_id must invalidate modern splits."""
+    base = clean(make_frame(n_groups=20, per_group=10))
+    splits = make_splits(base, seed=0)
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "split.npz")
+        save_splits(path, splits, base)
+        reloaded = load_splits(path, base, allow_legacy=False)
+        assert all(np.array_equal(splits[k], reloaded[k]) for k in splits)
+        edited = base.copy()
+        edited.loc[0, "title"] = "Changed posting"
+        expect_error(ValueError, lambda: load_splits(path, edited, allow_legacy=False))
+        edited = base.copy()
+        edited.loc[0, "fraudulent"] = 1 - int(edited.loc[0, "fraudulent"])
+        expect_error(ValueError, lambda: load_splits(path, edited, allow_legacy=False))
 
 
 def test_seed_everything():
