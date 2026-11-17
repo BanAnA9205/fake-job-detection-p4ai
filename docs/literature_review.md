@@ -51,7 +51,7 @@ From the sources above (all abstract-level):
 3. In the one paper I read in full (Fraud-BERT), the strong baselines (SVM, RF, LR) are already close to the fine-tuned model in accuracy and the gap is mainly in recall, so a tuned classical baseline deserves a fair test.
 4. Few papers combine a baseline floor, handcrafted-versus-pretrained features, tuning and explanation under one protocol.
 
-Our contribution is a controlled comparison on one protocol: TF-IDF versus frozen sentence embeddings, with linear models and boosted trees, tuned on a validation split, evaluated on a held-out test set with imbalance-appropriate metrics, and explained with SHAP or coefficients. I have not run a search for claims (2) and (3) beyond the papers above, so state them cautiously in the report.
+Our implemented comparison covers TF-IDF/BM25, frozen sentence embeddings and fine-tuned DistilBERT with logistic regression, decision tree and MLP classifiers. Classical candidates are tuned by grouped training-fold cross-validation, then thresholds are chosen on validation. The project explains classical results using linear coefficients, tree rules, permutation importance and error reading. Boosted trees and SHAP are proposed future extensions, not implemented experiments. I have not run a search for claims (2) and (3) beyond the papers above, so state them cautiously in the report.
 
 ## References (to verify)
 

@@ -742,6 +742,12 @@ if res.empty:
     raise StopExecution
 print(f"{len(res)} runs found: {res['model'].nunique()} models, "
       f"seeds {sorted(int(x) for x in res['seed'].unique())}")
+if "verified_artifact" in res.columns and not res["verified_artifact"].all():
+    print("WARNING: historical JSON/NPZ lacks verified provenance. "
+          "These scores are for reference only; regenerate before final claims.")
+if ((res["model"].str.startswith("dummy")) & (res["thr"] == 0)).any():
+    print("WARNING: legacy dummy baseline used threshold=0 and predicted all jobs fraud. "
+          "Its F1/recall/confusion counts are invalid; rerun notebook 02.")
 """),
     ("md", """
 ## Which runs were found

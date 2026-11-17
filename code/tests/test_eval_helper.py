@@ -99,6 +99,31 @@ def test_nondummy_uses_f1_validation_threshold():
     assert threshold_for_model(model, y, scores) == pick_threshold(y, scores)
 
 
+def test_invalid_evaluation_inputs_raise():
+    bad = [
+        ([0, 1], [0.5]),
+        ([0, 0], [0.1, 0.2]),
+        ([0, 1], [0.2, float("nan")]),
+        ([0, 1], [0.2, float("inf")]),
+        ([0, 2], [0.2, 0.8]),
+        ([], []),
+    ]
+    for y, s in bad:
+        for method in (lambda: evaluate(y, s, 0.5),
+                       lambda: pick_threshold(y, s)):
+            try:
+                method()
+            except ValueError:
+                continue
+            raise AssertionError(f"invalid inputs were accepted: {y} {s}")
+    try:
+        evaluate([0, 1], [0.3, 0.7], float("nan"))
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("NaN threshold was accepted")
+
+
 def test_compare_table():
     tr = evaluate([1, 1, 0, 0], [0.9, 0.8, 0.2, 0.1], thr=0.5)
     te = evaluate([1, 0], [0.6, 0.4], thr=0.5)

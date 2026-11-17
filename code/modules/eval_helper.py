@@ -21,14 +21,28 @@ def score_of(model, X):
     return np.asarray(model.decision_function(X))
 
 
+def _validated_binary_scores(y, score):
+    """Reject malformed evaluation inputs rather than silently reporting misleading metrics."""
+    y = np.asarray(y)
+    score = np.asarray(score)
+    if y.ndim != 1 or score.ndim != 1 or len(y) == 0 or len(y) != len(score):
+        raise ValueError("y and score must be nonempty, equally sized 1-D arrays")
+    if not np.isin(y, [0, 1]).all() or np.unique(y).size != 2:
+        raise ValueError("binary evaluation requires both labels 0 and 1")
+    if not np.issubdtype(score.dtype, np.number) or not np.isfinite(score).all():
+        raise ValueError("scores must be finite numeric values")
+    return y.astype(int), score.astype(float)
+
+
 def evaluate(y, score, thr):
     """Thresholded metrics plus PR-AUC and ROC-AUC.
 
     thr is required: probability scores and SVM decision scores need
     different thresholds, so the caller must state one.
     """
-    y = np.asarray(y).astype(int)
-    score = np.asarray(score, dtype=float)
+    y, score = _validated_binary_scores(y, score)
+    if not np.isfinite(thr):
+        raise ValueError("classification threshold must be finite")
 
     # Hard predictions at this threshold and their confusion counts.
     pred = (score >= thr).astype(int)
@@ -54,8 +68,7 @@ def pick_threshold(y_val, score_val):
 
     On ties the HIGHER threshold wins, which flags fewer rows at the same F1.
     """
-    y = np.asarray(y_val).astype(int)
-    s = np.asarray(score_val, dtype=float)
+    y, s = _validated_binary_scores(y_val, score_val)
 
     # Precision and recall at every distinct score. The last point (precision 1,
     # recall 0) has no threshold, so it is dropped.

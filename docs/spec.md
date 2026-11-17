@@ -17,9 +17,9 @@ Credit Risk Scoring
 Anomaly Detection
 
 
----- 
-group strategy: reuse the pipeline in the older work to save effort: /home/banana9205/Desktop/Main/Uni/P4DSAI/older_work/ 
+----
 
-but make sure they still comply and is well-suited with the requirements above
-
-and since this course is more about coding than theory (see syllabus.pdf), we need to read the slides to follow conventions and stuff.
+Implementation notes:
+- Prefer reusable modules and independently testable preprocessing/evaluation code.
+- Validate data leakage and reproducibility against the course sessions.
+- Historical results must be regenerated after changes to model selection or evaluation.
