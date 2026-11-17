@@ -32,6 +32,15 @@ def test_heads_on_random_embeddings():
     assert mlp.predict_proba(X[200:]).shape == (100, 2)
 
 
+def test_seed_is_set_before_pretrained_head_initialization():
+    """Static guard: random head initialization must happen after setting the split seed."""
+    import inspect
+    source = inspect.getsource(deep_runs.run_bert)
+    seed_call = source.index("dh.seed_everything(seed)")
+    load_call = source.index("fth.load_model_and_tokenizer(bert_model)")
+    assert seed_call < load_call
+
+
 def test_classical_run_with_dummy_only_and_resume():
     df = ft.add_engineered_features(dh.clean(dh.load_raw("../data/fake_job_postings.csv")))
     out = tempfile.mkdtemp()
@@ -49,5 +58,6 @@ def test_classical_run_with_dummy_only_and_resume():
 if __name__ == "__main__":
     test_deep_runs_imports_without_torch()
     test_heads_on_random_embeddings()
+    test_seed_is_set_before_pretrained_head_initialization()
     test_classical_run_with_dummy_only_and_resume()
     print("all run tests passed")

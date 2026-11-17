@@ -54,8 +54,9 @@ def _amp(device):
     """bf16 autocast on cuda (roughly half the memory); a no-op context elsewhere."""
     import torch
 
-    if str(device).startswith("cuda"):
+    if str(device).startswith("cuda") and torch.cuda.is_bf16_supported():
         return torch.autocast("cuda", dtype=torch.bfloat16)
+    # Not every CUDA GPU supports BF16. Use safe FP32 rather than an invalid autocast.
     return contextlib.nullcontext()
 
 

@@ -1141,21 +1141,29 @@ EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 BERT_MODEL = "distilbert-base-uncased"
 EPOCHS, BATCH_SIZE, MAX_LEN, LR = 5, 128, 256, 2e-5
 LOG_EVERY = 10  # print the loss every this many steps
-DEVICE = "cuda:1"  # which GPU to use; the server is shared, so pick an emptier one (nvidia-smi), e.g. "cuda:1"
+# Select a valid GPU via P4AI_DEVICE=cuda:0 (or cuda:1 on multi-GPU servers).
+DEVICE = os.environ.get("P4AI_DEVICE", "cuda:0")
+ON_GPU_SERVER = os.environ.get("P4AI_ENABLE_GPU", "0") == "1"
 
-# SAFETY: the embedding and fine-tuning cells are heavy GPU work. They run only when this flag is
-# True, and it must stay False on the laptop. Set it to True on the GPU server, nowhere else.
-ON_GPU_SERVER = False
-
-# Libraries present? (a missing one would make the heavy cells fail, not skip)
-HAVE_TORCH = all(importlib.util.find_spec(m) for m in ("torch", "transformers", "sentence_transformers"))
+# Each workflow should only depend on the packages that it actually imports.
+HAVE_TORCH = importlib.util.find_spec("torch") is not None
+HAVE_TRANSFORMERS = importlib.util.find_spec("transformers") is not None
+HAVE_SENTENCE_TRANSFORMERS = importlib.util.find_spec("sentence_transformers") is not None
 HAVE_EMBEDDINGS = os.path.exists("features/" + EMBED_MODEL.replace("/", "_") + "_emb.npy")
 
-# Heavy cells need the explicit opt-in AND the libraries; the sklearn heads are light (CPU) and
-# only need the cached embeddings.
-RUN_EMBED = RUN_BERT = ON_GPU_SERVER and HAVE_TORCH
+GPU_READY = False
+if ON_GPU_SERVER and HAVE_TORCH:
+    import torch
+    if DEVICE.startswith("cuda"):
+        index = int(DEVICE.split(":")[1]) if ":" in DEVICE else 0
+        GPU_READY = torch.cuda.is_available() and 0 <= index < torch.cuda.device_count()
+    else:
+        GPU_READY = DEVICE == "cpu"
+RUN_EMBED = GPU_READY and HAVE_SENTENCE_TRANSFORMERS
+RUN_BERT = GPU_READY and HAVE_TRANSFORMERS
 RUN_HEADS = RUN_EMBED or HAVE_EMBEDDINGS
-print({"ON_GPU_SERVER": ON_GPU_SERVER, "torch stack": HAVE_TORCH, "cached embeddings": HAVE_EMBEDDINGS})
+print({"gpu_opt_in": ON_GPU_SERVER, "device": DEVICE, "device_ready": GPU_READY,
+       "run_embeddings": RUN_EMBED, "run_bert": RUN_BERT, "cached_embeddings": HAVE_EMBEDDINGS})
 
 dh.seed_everything(SEED)
 """),

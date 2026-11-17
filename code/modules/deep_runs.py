@@ -163,6 +163,7 @@ def run_bert(df, seeds, out_dir, device, bert_model=BERT_MODEL, epochs=3, batch_
         # Fresh pretrained model per seed, and the texts tokenised once per split.
         start = time.time()
         print(f"loading {bert_model} (downloads on the first run)...", flush=True)
+        dh.seed_everything(seed)  # also seeds the newly initialized classification head
         model, tokenizer = fth.load_model_and_tokenizer(bert_model)
         print("tokenising...", flush=True)
         enc_tr = fth.encode_texts(tokenizer, df["text"].iloc[tr].tolist(), max_len)
