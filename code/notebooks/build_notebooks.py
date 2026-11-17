@@ -696,7 +696,7 @@ scores validation and test once. One JSON + NPZ pair per (model, seed) goes to
 `outputs/classical/`; pairs that already exist are skipped. Only validation numbers are printed.
 """),
     ("code", """
-RUN_CLASSICAL = True  # False: only read the saved results below
+RUN_CLASSICAL = False  # explicit opt-in; old results lack verified provenance
 if RUN_CLASSICAL:
     df_all = ft.add_engineered_features(dh.clean(dh.load_raw(DATA)))
     cr.run_classical(df_all, SEEDS, out_dir=OUT_CLASSICAL, n_iter=4, cv=3)

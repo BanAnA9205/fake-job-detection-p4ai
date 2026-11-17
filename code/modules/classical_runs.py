@@ -5,13 +5,13 @@ pick the decision threshold on the validation rows, then score validation and te
 A finished (model, seed) is skipped on the next call, so an interrupted run can resume.
 """
 
-import json
 import os
 import time
 import warnings
 
 from modules import data_helper as dh
 from modules import eval_helper as ev
+from modules import features as ft
 from modules import models as md
 from modules import results_helper as rh
 
@@ -41,7 +41,7 @@ def fit_model(name, seed, train, y_train, n_iter, cv, n_jobs):
     return search.best_estimator_, search.best_params_, float(search.best_score_)
 
 
-def run_one(name, seed, parts, out_dir, n_iter, cv, n_jobs):
+def run_one(name, seed, parts, out_dir, n_iter, cv, n_jobs, run_signature=None):
     """Fit one model on one split and save its results."""
     train, val, test = parts
     y_train, y_val, y_test = (p["fraudulent"].to_numpy() for p in parts)
@@ -66,7 +66,8 @@ def run_one(name, seed, parts, out_dir, n_iter, cv, n_jobs):
                    s_test, train_pr_auc=ev.evaluate(y_train, s_train, thr)["pr_auc"],
                    best_params=best_params, seconds=seconds,
                    notes=f"tuned with {n_iter} random candidates, {cv}-fold grouped CV; "
-                         f"cv PR-AUC {cv_score}; warnings: {warned or 'none'}")
+                         f"cv PR-AUC {cv_score}; warnings: {warned or 'none'}",
+                   run_signature=run_signature)
 
     # Only validation is printed on purpose: test numbers stay in the saved files until the final report.
     print(f"seed {seed} {name:16s} val PR-AUC {val_m['pr_auc']:.3f} F1 {val_m['f1']:.3f} | {seconds}s"
@@ -77,6 +78,8 @@ def run_classical(df, seeds, out_dir="outputs/classical", models=ALL_MODELS,
                   split_dir="splits", n_iter=4, cv=3, n_jobs=1):
     """All models for all seeds on the cleaned, featurised frame df; finished runs are skipped."""
     assert 1 <= n_jobs <= 4, "n_jobs is capped at 4 to keep the machine cool"
+    data_hash = rh.dataset_fingerprint(df)
+    sources = (dh.__file__, ft.__file__, md.__file__, ev.__file__, rh.__file__, __file__)
     for seed in seeds:
         # The saved split for this seed, as three frames.
         dh.seed_everything(seed)
@@ -87,17 +90,13 @@ def run_classical(df, seeds, out_dir="outputs/classical", models=ALL_MODELS,
 
         # Every model on this split; finished runs are skipped so a crash can resume.
         for name in models:
-            if rh.result_exists(out_dir, name, seed):
-                # Historical baseline runs used an F1-tuned threshold that made
-                # most_frequent predict *every* row as fraud. Recompute those
-                # cheap runs once; a corrected result can still be resumed.
-                outdated_dummy = False
-                if name.startswith("dummy"):
-                    json_path = os.path.join(out_dir, f"{name}_seed{seed}.json")
-                    with open(json_path, encoding="utf-8") as f:
-                        outdated_dummy = json.load(f).get("thr") != 0.5
-                if not outdated_dummy:
-                    print(f"seed {seed} {name}: already done, skipping")
-                    continue
-                print(f"seed {seed} {name}: outdated baseline, recomputing", flush=True)
-            run_one(name, seed, parts, out_dir, n_iter, cv, n_jobs)
+            config = {"family": "classical", "model": name, "seed": seed,
+                      "n_iter": n_iter, "cv": cv, "n_jobs": n_jobs,
+                      "grid": md.PARAM_GRIDS.get(name, {})}
+            signature = rh.experiment_signature(data_hash, config, sources)
+            if rh.result_exists(out_dir, name, seed, expected_signature=signature):
+                print(f"seed {seed} {name}: validated prior result, skipping")
+                continue
+            print(f"seed {seed} {name}: no matching verified result; recomputing", flush=True)
+            run_one(name, seed, parts, out_dir, n_iter, cv, n_jobs,
+                    run_signature=signature)

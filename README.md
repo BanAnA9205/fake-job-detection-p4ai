@@ -20,3 +20,22 @@ Notebook 03 needs a GPU and `torch`, `transformers`, `sentence-transformers`; it
 
 Headline result (test PR-AUC, mean of 5 split seeds): BM25 logistic regression 0.847, TF-IDF MLP 0.846, fine-tuned DistilBERT 0.831,
 TF-IDF logistic regression 0.821, frozen-embedding MLP head 0.632, decision tree 0.402, dummy 0.049. See notebook 04.
+
+## Reproducibility and historical artifacts
+
+The committed `code/outputs/` JSON/NPZ files are historical results from the original
+pipeline. They do **not** have run signatures or archive checksums and are available
+for reading only; they are not accepted for resume. The legacy dummy baseline
+thresholds are wrong (they flagged every row). Set `RUN_CLASSICAL=True` in notebook
+02 to regenerate corrected, integrity-checked experiments on the verified splits.
+This requires rerunning the classical models and may take significant CPU time.
+
+Embedding caches now use a content-addressed filename based on the ordered texts,
+job IDs, model name, revision (if provided) and truncation length. Older
+`<model>_emb.npy` / `<model>_ids.npy` caches cannot be trusted and must be
+recreated from notebook 03.
+
+GPU execution is opt-in using `P4AI_ENABLE_GPU=1` and optionally
+`P4AI_DEVICE=cuda:0` (or another valid device), not a hardcoded server GPU.
+Rebuilding notebooks with `python code/notebooks/build_notebooks.py` overwrites
+their saved outputs.
