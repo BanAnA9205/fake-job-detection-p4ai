@@ -51,3 +51,23 @@ for threshold choice. Classical and embedding MLPs no longer use the ungrouped
 internal validation holdout in sklearn's `early_stopping=True`.
 The committed deep-learning results were produced before this correction; rerun
 them before making any updated performance claim.
+
+## Run the checks
+
+Install the reproducible core/test tooling in a supported Python environment:
+
+```bash
+python -m venv .venv
+.venv/bin/python -m pip install -r code/requirements-dev.txt
+cd code
+../.venv/bin/python -m pytest -q tests --ignore=tests/test_finetune_helper.py
+```
+
+The optional deep-learning dependency set is in `code/requirements-deep.txt`;
+it is intentionally not part of the lightweight CPU CI. With the deep stack
+installed, run `python -m pytest -q tests/test_finetune_helper.py`.
+Full BERT training is **not** part of CI and requires explicit GPU opt-in.
+
+A full experiment reproducibility claim requires saving the exact package
+versions, a fixed pretrained model revision and the run signature; lower-bound
+requirements alone do not recreate a historical environment bit-for-bit.
