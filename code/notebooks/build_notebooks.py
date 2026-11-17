@@ -1149,7 +1149,7 @@ ON_GPU_SERVER = os.environ.get("P4AI_ENABLE_GPU", "0") == "1"
 HAVE_TORCH = importlib.util.find_spec("torch") is not None
 HAVE_TRANSFORMERS = importlib.util.find_spec("transformers") is not None
 HAVE_SENTENCE_TRANSFORMERS = importlib.util.find_spec("sentence_transformers") is not None
-HAVE_EMBEDDINGS = os.path.exists("features/" + EMBED_MODEL.replace("/", "_") + "_emb.npy")
+HAVE_EMBEDDINGS = False  # checked using text + IDs after df is loaded
 
 GPU_READY = False
 if ON_GPU_SERVER and HAVE_TORCH:
@@ -1176,6 +1176,12 @@ is scored on identical rows.
     ("code", """
 df = ft.add_engineered_features(dh.clean(dh.load_raw(DATA)))
 print("rows:", len(df), "| fraud:", int(df["fraudulent"].sum()))
+HAVE_EMBEDDINGS = dr.deep_helper.cache_exists(
+    df["text"].tolist(), df["job_id"].to_numpy(), model_name=EMBED_MODEL,
+    cache_dir=dr.EMBED_CACHE,
+)
+RUN_HEADS = RUN_EMBED or HAVE_EMBEDDINGS
+print("validated embedding cache:", HAVE_EMBEDDINGS)
 """),
     ("md", """
 ## Step 1: frozen sentence embeddings

@@ -37,21 +37,11 @@ def print_splits(splits, y, seed):
               f"rate={y[idx].mean():.4f}")
 
 
-def load_embeddings(embed_model, job_ids, cache_dir=EMBED_CACHE):
-    """Load the cached embeddings for these rows; never imports sentence-transformers."""
-    slug = embed_model.replace("/", "_")
-    emb_path = os.path.join(cache_dir, slug + "_emb.npy")
-    ids_path = os.path.join(cache_dir, slug + "_ids.npy")
-
-    # The cache must exist...
-    if not (os.path.exists(emb_path) and os.path.exists(ids_path)):
-        raise FileNotFoundError(f"no embeddings for {embed_model} in {cache_dir}/; run the embedding step first")
-
-    # ...and must have been built for exactly these rows, in this order.
-    assert np.array_equal(np.load(ids_path, allow_pickle=True), np.asarray(job_ids)), (
-        "cached embeddings belong to different rows; rerun the embedding step"
+def load_embeddings(embed_model, job_ids, texts, cache_dir=EMBED_CACHE):
+    """Load embeddings only if the ordered text, ids and encoder settings match."""
+    return deep_helper.load_cached_embeddings(
+        texts, job_ids, model_name=embed_model, cache_dir=cache_dir,
     )
-    return np.load(emb_path)
 
 
 def evaluate_scores(y, splits, score_val, score_test):
@@ -119,7 +109,7 @@ def save_head_result(out_dir, name, seed, model, params, X, y, splits, start):
 def run_heads(df, seeds, out_dir, embed_model=EMBED_MODEL):
     """Fit the two sklearn heads on cached embeddings (CPU only, no torch import)."""
     y = df[dh.TARGET].to_numpy()
-    emb = load_embeddings(embed_model, df["job_id"].to_numpy())
+    emb = load_embeddings(embed_model, df["job_id"].to_numpy(), df["text"].tolist())
     print(f"embeddings: {emb.shape}")
     for seed in seeds:
         # The saved split for this seed.
