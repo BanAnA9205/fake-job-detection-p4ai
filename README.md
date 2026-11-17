@@ -44,3 +44,10 @@ New split files hash every ordered field and target label. The original committe
 `splits/seed*.npz` files use legacy ID-only fingerprints: loading them emits a
 warning and re-checks group disjointness and class balance, but cannot establish
 full original-data integrity. Strict callers can set `allow_legacy=False`.
+
+For frozen MiniLM + logistic regression, C is now tuned by three-fold cross-validation
+*inside training data* (group-aware for real EMSCAD runs); validation is reserved
+for threshold choice. Classical and embedding MLPs no longer use the ungrouped
+internal validation holdout in sklearn's `early_stopping=True`.
+The committed deep-learning results were produced before this correction; rerun
+them before making any updated performance claim.

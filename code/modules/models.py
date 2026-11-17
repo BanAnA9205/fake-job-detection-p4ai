@@ -40,9 +40,10 @@ def get_models(seed=0):
         ]),
         "mlp": Pipeline([
             ("pre", make_preprocessor("tfidf")),
-            # MLPClassifier has no class_weight; the decision threshold is chosen on
-            # validation later, which handles the imbalance for ranking-based scores.
-            ("clf", MLPClassifier(hidden_layer_sizes=(128,), early_stopping=True,
+            # Do not let sklearn make an ungrouped internal validation split:
+            # repeated descriptions would appear on both sides of that holdout.
+            # Stopping on a training-loss plateau does not use held-out labels.
+            ("clf", MLPClassifier(hidden_layer_sizes=(128,), early_stopping=False,
                                   n_iter_no_change=5, max_iter=100, random_state=seed)),
         ]),
     }

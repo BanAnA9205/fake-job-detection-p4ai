@@ -111,7 +111,7 @@ def test_every_model_fits_and_scores():
     df, X = _xy()
     y = df["fraudulent"].to_numpy()
     # Toy-sized overrides: keep every word, and let the MLP train on all 60 rows
-    # (its early stopping would hold out only 6 rows, too few to learn from).
+    # (we set high max_iter for a useful training-only smoke test).
     small = {"pre__text__min_df": 1, "clf__early_stopping": False, "clf__max_iter": 300}
     for name, pipe in models_mod.get_models().items():
         pipe.set_params(**{k: v for k, v in small.items() if k in pipe.get_params()})

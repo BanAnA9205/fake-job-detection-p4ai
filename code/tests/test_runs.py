@@ -25,7 +25,7 @@ def test_heads_on_random_embeddings():
     rng = np.random.default_rng(0)
     X = rng.normal(size=(300, 8)).astype("float32")
     y = (X[:, 0] + 0.3 * rng.normal(size=300) > 1.0).astype(int)
-    model, params = deep_runs.fit_logreg_head(X[:200], y[:200], X[200:], y[200:], seed=0)
+    model, params = deep_runs.fit_logreg_head(X[:200], y[:200], seed=0)
     assert params["C"] in deep_runs.LOGREG_CS
     assert model.predict_proba(X[200:]).shape == (100, 2)
     mlp, _ = deep_runs.fit_mlp_head(X[:200], y[:200], seed=0)

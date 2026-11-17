@@ -12,6 +12,7 @@ import time
 import numpy as np
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import average_precision_score
+from sklearn.model_selection import StratifiedGroupKFold, StratifiedKFold, cross_val_score
 from sklearn.neural_network import MLPClassifier
 from sklearn.utils.class_weight import compute_class_weight
 
@@ -63,30 +64,41 @@ def run_embed(df, device, embed_model=EMBED_MODEL):
     print(f"embeddings: {emb.shape} ready in {time.time() - start:.1f}s")
 
 
-def fit_logreg_head(Xtr, ytr, Xva, yva, seed):
-    """Logistic regression on embeddings, with C picked by validation PR-AUC."""
+def fit_logreg_head(Xtr, ytr, seed, groups=None):
+    """Select C with CV on TRAIN only; leave validation for threshold selection.
+
+    Group-aware CV is used when group IDs are provided (as in the real runs).
+    This prevents using the same validation labels to tune C and tune threshold.
+    """
+    if groups is None:
+        splitter = StratifiedKFold(n_splits=3, shuffle=True, random_state=seed)
+    else:
+        splitter = StratifiedGroupKFold(n_splits=3, shuffle=True, random_state=seed)
     best_auc, best_model, best_params = -np.inf, None, {}
     for C in LOGREG_CS:
-        # Fit on train for this C, score validation PR-AUC.
-        model = LogisticRegression(C=C, class_weight="balanced", max_iter=2000, random_state=seed)
-        model.fit(Xtr, ytr)
-        auc = float(average_precision_score(yva, ev.score_of(model, Xva)))
-
-        # Keep the best C so far.
+        model = LogisticRegression(C=C, class_weight="balanced",
+                                   max_iter=2000, random_state=seed)
+        auc = float(cross_val_score(
+            model, Xtr, ytr, groups=groups, cv=splitter,
+            scoring="average_precision", error_score="raise",
+        ).mean())
         if auc > best_auc:
-            best_auc, best_model, best_params = auc, model, {"C": C}
+            best_auc, best_model = auc, model
+            best_params = {"C": C, "train_cv_ap": auc, "train_cv_folds": 3}
+    best_model.fit(Xtr, ytr)
     return best_model, best_params
 
 
 def fit_mlp_head(Xtr, ytr, seed):
-    """sklearn MLP on embeddings; early_stopping holds out its own slice of train."""
-    model = MLPClassifier(hidden_layer_sizes=(128,), early_stopping=True, n_iter_no_change=5,
+    """MLP on embeddings; stop on training loss, without an ungrouped holdout."""
+    model = MLPClassifier(hidden_layer_sizes=(128,), early_stopping=False, n_iter_no_change=5,
                           max_iter=100, random_state=seed)
     model.fit(Xtr, ytr)
     return model, {"hidden_layer_sizes": [128]}
 
 
-def save_head_result(out_dir, name, seed, model, params, X, y, splits, start):
+def save_head_result(out_dir, name, seed, model, params, X, y, splits, start,
+                     run_signature=None):
     """Score a fitted head, evaluate it, and write the result files."""
     tr, va, te = splits["train"], splits["val"], splits["test"]
 
@@ -101,7 +113,8 @@ def save_head_result(out_dir, name, seed, model, params, X, y, splits, start):
         y[te], score_test,
         train_pr_auc=average_precision_score(y[tr], ev.score_of(model, X[tr])),
         best_params=params, seconds=time.time() - start,
-        notes="frozen embeddings with a sklearn head; threshold on validation")
+        notes="frozen embeddings; training-only hyperparameter/early-stop; threshold on validation",
+        run_signature=run_signature)
     print(f"{name} seed {seed}: val PR-AUC {val_metrics['pr_auc']:.3f}, "
           f"test PR-AUC {test_metrics['pr_auc']:.3f}")
 
@@ -111,6 +124,8 @@ def run_heads(df, seeds, out_dir, embed_model=EMBED_MODEL):
     y = df[dh.TARGET].to_numpy()
     emb = load_embeddings(embed_model, df["job_id"].to_numpy(), df["text"].tolist())
     print(f"embeddings: {emb.shape}")
+    data_hash = rh.dataset_fingerprint(df)
+    sources = (dh.__file__, deep_helper.__file__, ev.__file__, rh.__file__, __file__)
     for seed in seeds:
         # The saved split for this seed.
         splits = get_splits(df, seed)
@@ -118,20 +133,33 @@ def run_heads(df, seeds, out_dir, embed_model=EMBED_MODEL):
         tr, va = splits["train"], splits["val"]
 
         # Head 1: logistic regression (skipped when its result files exist).
-        if rh.result_exists(out_dir, "emb_logreg", seed):
+        lr_signature = rh.experiment_signature(data_hash, {
+            "family": "embedding", "head": "emb_logreg", "seed": seed,
+            "encoder": embed_model, "C_candidates": LOGREG_CS,
+            "cv": "3-fold grouped train", "max_seq_length": 256,
+        }, sources)
+        if rh.result_exists(out_dir, "emb_logreg", seed, expected_signature=lr_signature):
             print(f"skip emb_logreg seed {seed}: result files already exist")
         else:
             start = time.time()
-            model, params = fit_logreg_head(emb[tr], y[tr], emb[va], y[va], seed)
-            save_head_result(out_dir, "emb_logreg", seed, model, params, emb, y, splits, start)
+            model, params = fit_logreg_head(
+                emb[tr], y[tr], seed, groups=df["group"].to_numpy()[tr])
+            save_head_result(out_dir, "emb_logreg", seed, model, params, emb, y,
+                             splits, start, run_signature=lr_signature)
 
         # Head 2: small MLP.
-        if rh.result_exists(out_dir, "emb_mlp", seed):
+        mlp_signature = rh.experiment_signature(data_hash, {
+            "family": "embedding", "head": "emb_mlp", "seed": seed,
+            "encoder": embed_model, "max_seq_length": 256,
+            "hidden_layer_sizes": [128], "early_stopping": False,
+        }, sources)
+        if rh.result_exists(out_dir, "emb_mlp", seed, expected_signature=mlp_signature):
             print(f"skip emb_mlp seed {seed}: result files already exist")
         else:
             start = time.time()
             model, params = fit_mlp_head(emb[tr], y[tr], seed)
-            save_head_result(out_dir, "emb_mlp", seed, model, params, emb, y, splits, start)
+            save_head_result(out_dir, "emb_mlp", seed, model, params, emb, y,
+                             splits, start, run_signature=mlp_signature)
 
 
 def run_bert(df, seeds, out_dir, device, bert_model=BERT_MODEL, epochs=3, batch_size=16,
@@ -139,9 +167,16 @@ def run_bert(df, seeds, out_dir, device, bert_model=BERT_MODEL, epochs=3, batch_
     """Fine-tune the encoder per seed; tokenise once per seed and evaluate test once."""
     y = df[dh.TARGET].to_numpy()
     name = "bert_" + bert_model.replace("/", "_")
+    data_hash = rh.dataset_fingerprint(df)
+    sources = (dh.__file__, ev.__file__, rh.__file__, fth.__file__, __file__)
     for seed in seeds:
-        # Resume support: skip seeds that already have result files.
-        if rh.result_exists(out_dir, name, seed):
+        signature = rh.experiment_signature(data_hash, {
+            "family": "fine_tune", "seed": seed, "encoder": bert_model,
+            "epochs": epochs, "batch_size": batch_size, "max_len": max_len,
+            "lr": lr, "class_weight": "sqrt", "optimizer": "AdamW",
+        }, sources)
+        # Never accept results from mismatched code, data or training settings.
+        if rh.result_exists(out_dir, name, seed, expected_signature=signature):
             print(f"skip {name} seed {seed}: result files already exist")
             continue
 
@@ -194,6 +229,6 @@ def run_bert(df, seeds, out_dir, device, bert_model=BERT_MODEL, epochs=3, batch_
                          "class_weight": "sqrt"},
             seconds=time.time() - start,
             notes="fine-tuned encoder with sqrt class weights; best epoch on validation",
-            history=history)
+            history=history, run_signature=signature)
         print(f"{name} seed {seed}: val PR-AUC {val_metrics['pr_auc']:.3f}, "
               f"test PR-AUC {test_metrics['pr_auc']:.3f}, {time.time() - start:.0f}s")
