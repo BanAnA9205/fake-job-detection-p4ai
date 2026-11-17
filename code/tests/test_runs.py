@@ -41,7 +41,9 @@ def test_classical_run_with_dummy_only_and_resume():
     classical_runs.run_classical(df, [0], out_dir=out, models=["dummy_majority"])  # must skip
     assert os.path.getmtime(os.path.join(out, "dummy_majority_seed0.json")) == before
     res = rh.load_results(out)
-    assert len(res) == 1 and 0.04 < res.loc[0, "test_pr_auc"] < 0.06  # base rate, 4.8% positives
+    assert len(res) == 1 and 0.04 < res.loc[0, "test_pr_auc"] < 0.06  # base rate
+    assert res.loc[0, "test_recall"] == 0.0
+    assert res.loc[0, "test_f1"] == 0.0  # majority baseline predicts all jobs real
 
 
 if __name__ == "__main__":

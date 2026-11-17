@@ -2,6 +2,7 @@
 
 import numpy as np
 import pandas as pd
+from sklearn.dummy import DummyClassifier
 from sklearn.metrics import (
     average_precision_score,
     confusion_matrix,
@@ -68,6 +69,19 @@ def pick_threshold(y_val, score_val):
     # Thresholds come in ascending order, so the last maximum is the highest threshold.
     best = len(f1) - 1 - int(np.argmax(f1[::-1]))
     return float(thresholds[best])
+
+
+def threshold_for_model(model, y_val, score_val):
+    """Keep DummyClassifier's prescribed predictions; tune real models on validation.
+
+    Optimizing F1 for a constant-score dummy would turn a majority-class
+    (all-real) predictor into an all-fraud predictor whenever the threshold is
+    equal to its constant score. 0.5 preserves both most_frequent and stratified
+    dummy predictions, whose class probabilities are zero or one.
+    """
+    if isinstance(model, DummyClassifier):
+        return 0.5
+    return pick_threshold(y_val, score_val)
 
 
 def compare_table(results):

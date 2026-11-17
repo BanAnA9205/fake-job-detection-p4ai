@@ -464,7 +464,7 @@ def report(name, model):
     \"\"\"Score a fitted model; the threshold is picked on validation only.\"\"\"
     # Validation scores, then the threshold chosen on them.
     s_val = ev.score_of(model, val)
-    thr = ev.pick_threshold(y_val, s_val)
+    thr = ev.threshold_for_model(model, y_val, s_val)
 
     # Train and validation metrics at that threshold, stored for the comparison table.
     results[name] = {"train": ev.evaluate(y_train, ev.score_of(model, train), thr),

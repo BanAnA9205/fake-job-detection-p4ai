@@ -15,6 +15,7 @@ matplotlib.use("Agg")  # tests run headless, no window needed
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from sklearn.dummy import DummyClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import precision_recall_curve
 from sklearn.svm import LinearSVC
@@ -24,6 +25,7 @@ from modules.eval_helper import (
     evaluate,
     pick_threshold,
     score_of,
+    threshold_for_model,
 )
 
 
@@ -73,6 +75,29 @@ def test_pick_threshold():
     assert np.isclose(evaluate(y2, s2, thr2)["f1"], 0.8) and thr2 == 0.85
     # Tie in F1: the higher threshold must win (flags fewer rows).
     assert pick_threshold([1, 0, 1, 0], [0.9, 0.5, 0.9, 0.5]) == 0.9
+
+def test_dummy_baselines_preserve_their_predictions():
+    X = np.zeros((12, 2))
+    y_train = np.array([0] * 10 + [1] * 2)
+    for strategy in ("most_frequent", "stratified"):
+        model = DummyClassifier(strategy=strategy, random_state=17).fit(X, y_train)
+        score = score_of(model, X)
+        threshold = threshold_for_model(model, y_train, score)
+        assert threshold == 0.5
+        assert np.array_equal((score >= threshold).astype(int), model.predict(X))
+        if strategy == "most_frequent":
+            measured = evaluate(y_train, score, threshold)
+            assert measured["tp"] == 0 and measured["fp"] == 0
+            assert measured["tn"] == 10 and measured["fn"] == 2
+
+
+def test_nondummy_uses_f1_validation_threshold():
+    X = np.array([[-2.0], [-1.0], [1.0], [2.0]])
+    y = np.array([0, 0, 1, 1])
+    model = LogisticRegression().fit(X, y)
+    scores = score_of(model, X)
+    assert threshold_for_model(model, y, scores) == pick_threshold(y, scores)
+
 
 def test_compare_table():
     tr = evaluate([1, 1, 0, 0], [0.9, 0.8, 0.2, 0.1], thr=0.5)

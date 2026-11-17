@@ -5,6 +5,7 @@ pick the decision threshold on the validation rows, then score validation and te
 A finished (model, seed) is skipped on the next call, so an interrupted run can resume.
 """
 
+import json
 import os
 import time
 import warnings
@@ -55,7 +56,7 @@ def run_one(name, seed, parts, out_dir, n_iter, cv, n_jobs):
 
     # Scores on every split, then the threshold from validation and the metrics at it.
     s_train, s_val, s_test = (ev.score_of(model, p) for p in parts)
-    thr = ev.pick_threshold(y_val, s_val)          # chosen on validation only
+    thr = ev.threshold_for_model(model, y_val, s_val)          # chosen on validation only
     val_m = ev.evaluate(y_val, s_val, thr)
     test_m = ev.evaluate(y_test, s_test, thr)       # the test rows are scored once, here
     seconds = round(time.time() - start, 1)
@@ -87,6 +88,16 @@ def run_classical(df, seeds, out_dir="outputs/classical", models=ALL_MODELS,
         # Every model on this split; finished runs are skipped so a crash can resume.
         for name in models:
             if rh.result_exists(out_dir, name, seed):
-                print(f"seed {seed} {name}: already done, skipping")
-                continue
+                # Historical baseline runs used an F1-tuned threshold that made
+                # most_frequent predict *every* row as fraud. Recompute those
+                # cheap runs once; a corrected result can still be resumed.
+                outdated_dummy = False
+                if name.startswith("dummy"):
+                    json_path = os.path.join(out_dir, f"{name}_seed{seed}.json")
+                    with open(json_path, encoding="utf-8") as f:
+                        outdated_dummy = json.load(f).get("thr") != 0.5
+                if not outdated_dummy:
+                    print(f"seed {seed} {name}: already done, skipping")
+                    continue
+                print(f"seed {seed} {name}: outdated baseline, recomputing", flush=True)
             run_one(name, seed, parts, out_dir, n_iter, cv, n_jobs)
