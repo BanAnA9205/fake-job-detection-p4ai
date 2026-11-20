@@ -72,3 +72,29 @@ def tree_rules(pipe, max_depth=3):
     pre, clf = pipe.named_steps["pre"], pipe.named_steps["clf"]
     return export_text(clf, feature_names=list(pre.get_feature_names_out()),
                        max_depth=max_depth)
+
+
+def bert_token_attributions(model, tokenizer, text, device, max_len=256, n_steps=50):
+    """Integrated Gradients for one ad: how much each token pushed the fine-tuned model to fraud.
+
+    The baseline is the same ad with every word replaced by [PAD] (keeping [CLS] and [SEP]);
+    the attribution of a token is summed over its embedding dimensions. Uses captum.
+    """
+    import torch
+    from captum.attr import LayerIntegratedGradients
+
+    model.eval()
+    enc = tokenizer(text, truncation=True, max_length=max_len, return_tensors="pt").to(device)
+    ids, mask = enc["input_ids"], enc["attention_mask"]
+    baseline = torch.full_like(ids, tokenizer.pad_token_id)
+    baseline[0, 0], baseline[0, -1] = ids[0, 0], ids[0, -1]
+
+    # The explained output: P(fraud) for a batch of (interpolated) inputs.
+    def p_fraud(input_ids):
+        batch_mask = mask.expand(input_ids.shape[0], -1)
+        return torch.softmax(model(input_ids=input_ids, attention_mask=batch_mask).logits, -1)[:, 1]
+
+    lig = LayerIntegratedGradients(p_fraud, model.get_input_embeddings())
+    attr = lig.attribute(ids, baselines=baseline, n_steps=n_steps, internal_batch_size=16)
+    tokens = tokenizer.convert_ids_to_tokens(ids[0])
+    return tokens, attr.sum(dim=-1)[0].detach().float().cpu().numpy()

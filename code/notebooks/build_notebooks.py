@@ -372,18 +372,19 @@ print("flags dropped:", dropped or "none")
 
 NB2 = [
     ("md", """
-# Classical ML: dummy, logistic regression, BM25, tree, MLP (notebook 02)
+# Classical ML: dummy, logistic regression, BM25, tree, MLP, Naive Bayes, one-class SVM (notebook 02)
 
 Part A walks through one seed-0 split with the pipeline from the course slides: dummy
-baselines, TF-IDF logistic regression with a threshold picked on validation, BM25, a decision
-tree and an MLP, then explanations and error reading. Only training and validation rows
+baseline, TF-IDF logistic regression with a threshold picked on validation, BM25, a decision
+tree, an MLP, Complement Naive Bayes and an unsupervised one-class SVM, then explanations and
+error reading. Only training and validation rows
 are used there. Part B runs the tuned experiment for all five split seeds (finished runs are
 reused from `outputs/classical/`, so this is fast unless you delete them); the test split is
 scored once per (model, seed) inside the run. Comparing and plotting the saved results is
 notebook 04.
 
 Run time: about 5 minutes for part A; part B is under a minute when the saved runs exist, or
-about an hour if it has to recompute all 30 runs.
+about an hour if it has to recompute all 35 runs.
 """),
     ("code", """
 import sys, os; os.chdir(os.path.join(os.getcwd(), "..")) if os.path.basename(os.getcwd()) == "notebooks" else None; sys.path.insert(0, "."); import warnings
@@ -464,7 +465,8 @@ def report(name, model):
     \"\"\"Score a fitted model; the threshold is picked on validation only.\"\"\"
     # Validation scores, then the threshold chosen on them.
     s_val = ev.score_of(model, val)
-    thr = ev.pick_threshold(y_val, s_val)
+    # A dummy scores every ad the same, so it keeps its own predictions (threshold 0.5).
+    thr = 0.5 if name.startswith("dummy") else ev.pick_threshold(y_val, s_val)
 
     # Train and validation metrics at that threshold, stored for the comparison table.
     results[name] = {"train": ev.evaluate(y_train, ev.score_of(model, train), thr),
@@ -480,8 +482,10 @@ def report(name, model):
     ("md", """
 ## The dummy baseline (Sessions 6/7)
 
-Every model has to beat the dumb references first: `dummy_majority` always predicts
-the majority class; `dummy_stratified` guesses the class at the training rates.
+Every model has to beat the dumb reference first: `dummy_majority` always predicts the
+majority class (real). It reaches about 95% accuracy while catching no fraud at all, which is why
+accuracy is not our metric; its PR-AUC equals the fraud rate (about 0.049), the floor for PR-AUC.
+Its score is the same for every ad, so a tuned threshold would mean nothing; it keeps 0.5.
 """),
     ("code", """
 frames = [report(name, est.fit(train, y_train))
@@ -573,6 +577,49 @@ of its scores plus the threshold picked on validation (Session 5).
 """),
     ("code", """
 report("mlp", md.get_models(SEED)["mlp"].fit(train, y_train))
+"""),
+    ("md", """
+## Complement Naive Bayes
+
+The classic text-classification baseline: word counts per class, with no feature interactions.
+Complement NB is the variant designed for imbalanced classes (it learns each class from the
+documents of all *other* classes). It needs non-negative inputs, which TF-IDF, one-hot flags and
+the scaled counts are.
+"""),
+    ("code", """
+report("cnb", md.get_models(SEED)["cnb"].fit(train, y_train))
+"""),
+    ("md", """
+## One-class SVM: can fraud be found without labels?
+
+Anomaly detection view: learn what a *real* ad looks like from the real training ads only, then
+flag ads that do not fit. The detector never sees a fraud example; the labels are used only to
+leave the frauds out of its training data (and, in part B, to pick `nu`). An RBF kernel needs
+dense, low-dimensional input, so the TF-IDF matrix is first reduced to 100 to 200 dimensions with
+truncated SVD (as in LSA). The score is how far an ad lies outside the "normal" region.
+"""),
+    ("code", """
+report("ocsvm", md.get_models(SEED)["ocsvm"].fit(train, y_train))
+"""),
+    ("md", """
+Is the fraud signal missing from these features, or does the "unusual = fraud" assumption fail?
+Check: the same preprocessing and the same 200-dimensional SVD, but a supervised logistic
+regression that is allowed to see the labels.
+"""),
+    ("code", """
+from sklearn.decomposition import TruncatedSVD
+from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import Pipeline
+
+svd_lr = Pipeline([("pre", ft.make_preprocessor("tfidf")),
+                   ("svd", TruncatedSVD(n_components=200, random_state=SEED)),
+                   ("clf", LogisticRegression(class_weight="balanced", max_iter=2000))])
+report("svd_logreg (check)", svd_lr.fit(train, y_train))
+"""),
+    ("md", """
+Reading: if the supervised model on the very same features scores far above the one-class SVM,
+the information is there and it is the anomaly assumption that fails: fraudulent ads are not
+unusual ads; many are generic, template-like postings.
 """),
     ("md", """
 ## All models side by side
@@ -779,9 +826,8 @@ pd.DataFrame({
 }).loc[order]
 """),
     ("md", """
-Why the two dummy rows show recall 1.0: a constant score has a single possible threshold,
-and picking it by F1 flags every ad as fraud. Their precision therefore equals the
-share of fraud in the data, which is the floor every real model has to beat.
+The dummy predicts "real" for every ad: precision, recall and F1 are 0 and its PR-AUC equals the
+share of fraud in the data, the floor every real model has to beat.
 """),
     ("md", """
 ## Validation vs test PR-AUC
@@ -924,10 +970,12 @@ not by all.
 """),
     ("code", """
 # Which test frauds each model catches at its own threshold.
+SKIP_CATCH = ("dummy_majority", "ocsvm")
 fraud_idx = np.where(y_test == 1)[0]
-# The dummies are left out: at their threshold they flag every ad, so they "catch" every fraud.
+# Left out: the dummy flags nothing, and the one-class SVM flags about half of all ads,
+# so it "catches" frauds by flagging everything near them.
 caught = {name: frozenset(fraud_idx[s["score_test"][fraud_idx] >= thr])
-          for name, (s, thr) in seed_runs.items() if not name.startswith("dummy")}
+          for name, (s, thr) in seed_runs.items() if name not in SKIP_CATCH}
 
 # Pairwise matrix: frauds caught by the row model but missed by the column model.
 names = list(caught)
@@ -967,7 +1015,7 @@ else:
     # Ads flagged by at least one real model at its own threshold.
     caught_any = np.zeros(len(test), dtype=bool)
     for name, (s, thr) in seed_runs.items():
-        if not name.startswith("dummy"):      # dummies flag every ad, so they would hide all misses
+        if name not in SKIP_CATCH:            # see the cell above for why these two are left out
             caught_any |= (s["score_test"] >= thr)
 
     # The frauds nobody caught, printed for reading.
@@ -1054,49 +1102,102 @@ else:
     # Time per epoch decides whether to run all five seeds.
     print("seconds per epoch:", hist["seconds"].round(0).tolist())
 """),
+    ("md", """
+## Explaining DistilBERT, part 1: where it disagrees with TF-IDF logistic regression (seed 0)
+
+Error analysis from the saved test scores only, nothing is refitted. At each model's own
+validation-chosen threshold: the frauds one model catches and the other misses, and the real ads
+DistilBERT is most sure are fraud (its most confident false alarms).
+"""),
+    ("code", """
+bert_name = next((n for n in seed_runs if n.startswith("bert_")), None)
+if bert_name is None or "logreg" not in seed_runs or not os.path.exists(SPLIT_PATH):
+    print("needs seed-0 runs of DistilBERT and logreg, and splits/seed0.npz")
+else:
+    df = ft.add_engineered_features(dh.clean(dh.load_raw(DATA)))
+    test = df.iloc[dh.load_splits(SPLIT_PATH, df)["test"]].reset_index(drop=True)
+
+    # Hard predictions of both models at their own thresholds.
+    (sb, tb), (sl, tl) = seed_runs[bert_name], seed_runs["logreg"]
+    flag_b, flag_l = sb["score_test"] >= tb, sl["score_test"] >= tl
+    fraud = y_test == 1
+
+    def titles(mask, k=8):
+        for _, r in test[mask].head(k).iterrows():
+            print("   -", str(r["title"])[:70], "|", str(r["description"])[:80])
+
+    print(f"frauds caught by DistilBERT only: {int((fraud & flag_b & ~flag_l).sum())}")
+    titles(fraud & flag_b & ~flag_l)
+    print(f"frauds caught by logreg only: {int((fraud & flag_l & ~flag_b).sum())}")
+    titles(fraud & flag_l & ~flag_b)
+
+    # The real ads with the highest DistilBERT scores.
+    worst = np.argsort(-np.where(fraud, -np.inf, sb["score_test"]))[:5]
+    print("DistilBERT's most confident false alarms:")
+    for i in worst:
+        print(f"   - score {sb['score_test'][i]:.3f} |", str(test.loc[i, "title"])[:70])
+"""),
+    ("md", """
+## Explaining DistilBERT, part 2: which words pushed it towards fraud (Integrated Gradients)
+
+Computed on the server right after training seed 0 (notebook 03): for 10 test ads, Integrated
+Gradients measures how much each token moved the fraud probability compared with an all-[PAD]
+version of the same ad. Word pieces (`##...`) are merged back into words. Listed: the 8 words with
+the largest push towards fraud.
+"""),
+    ("code", """
+paths = sorted(glob.glob(os.path.join(OUT_DEEP, "bert_*_explain_seed0.json")))
+if not paths:
+    print("no explanation file yet; it is written by the DistilBERT run of notebook 03")
+else:
+    with open(paths[0], encoding="utf-8") as f:
+        explained = json.load(f)
+    for r in explained:
+        # Merge word pieces into words and drop the special tokens.
+        words, attrs = [], []
+        for t, a in zip(r["tokens"], r["attributions"]):
+            if t in ("[CLS]", "[SEP]", "[PAD]"):
+                continue
+            if t.startswith("##") and words:
+                words[-1] += t[2:]
+                attrs[-1] += a
+            else:
+                words.append(t)
+                attrs.append(a)
+        top = [w for a, w in sorted(zip(attrs, words), reverse=True)[:8] if a > 0]
+        print(f"[{r['kind']}] score {r['score']:.3f}: " + ", ".join(top))
+"""),
+    ("md", """
+Reading: a word listed for a missed fraud still pushed towards fraud, just not enough to cross
+the threshold; words for a false alarm show what misled the model.
+"""),
 ("md", """
 ## Findings (classical models)
 
-Numbers are the means over the 5 split seeds in the first table, test split.
+Numbers are test PR-AUC, means over the 5 split seeds in the first table.
 
-- Every text-based model beats the dummy floor by a wide margin (test PR-AUC 0.82 to
-  0.85 against 0.049).
-- Logistic regression with TF-IDF, with BM25, and the MLP are within seed noise of each
-  other: the spread across seeds (about 0.07) is larger than the gaps between them.
-- A single decision tree on sparse TF-IDF is far weaker (test PR-AUC about 0.40).
-- Every model fits the training rows almost perfectly, so there is a large
-  generalisation gap (train minus test PR-AUC about 0.15 to 0.17 for the linear models
-  and the MLP).
+- Every supervised text model beats the dummy floor (0.049) by a wide margin: 0.77 to 0.85, except
+  the single decision tree (0.40).
+- Logistic regression with TF-IDF (0.821), with BM25 (0.847) and the MLP (0.846) are within seed
+  noise of each other: the spread across seeds (std about 0.06 to 0.08) is larger than the gaps
+  between them. The MLP costs about 7 minutes per seed against 1 to 1.5 for the logistic regressions.
+- Complement Naive Bayes reaches 0.773: below TF-IDF logistic regression on 4 of 5 seeds (mean
+  difference -0.048), but with the smallest spread across seeds of any supervised model (std 0.029).
+- The one-class SVM, trained on real ads only, scores 0.057 (ROC-AUC 0.47), no better than the
+  dummy. A supervised logistic regression on the same SVD features does far better (part A of
+  notebook 02), so the signal is in the features: fraudulent ads are simply not unusual ads. This is
+  why the project treats the task as supervised classification, not anomaly detection.
+- Train minus test PR-AUC is 0.15 to 0.17 for the logistic regressions, the MLP and Naive Bayes,
+  and 0.24 for the tree: all of them fit their training rows much better than unseen ads.
 - Caveat: the dataset marks real ads from some countries (for example Greece) as 0%
   fraud, so part of the signal may come from how the data was collected.
 """),
     ("md", """
 ## Findings (deep models)
 
-Numbers are test PR-AUC, means over the 5 split seeds (DistilBERT: 5 epochs, batch 128, texts cut
-at 256 tokens, best epoch on validation kept).
-
-- Frozen MiniLM embeddings are clearly worse than TF-IDF: the MLP head reaches 0.63 and the
-  logistic regression head 0.52, against 0.82 to 0.85 for the TF-IDF models. DistilBERT beats the
-  MLP head on all 5 seeds, by 0.20 on average. A single 384-number sentence vector loses what the
-  sparse word features keep (a guess, not tested).
-- Fine-tuned DistilBERT reaches 0.831 (std 0.066), between logistic regression with TF-IDF (0.821)
-  and the best classical models (BM25 logistic regression 0.847, MLP 0.846). It does not clearly
-  beat the classical models: per seed it is ahead of BM25 logistic regression on 1 seed of 5 (mean
-  difference -0.016, std 0.016) and of the TF-IDF MLP on 1 of 5 (-0.015, std 0.034), and ahead of plain
-  TF-IDF logistic regression on 2 of 5 (+0.010, std 0.037). With 5 seeds these gaps are too small
-  to rank the models.
-- All the TF-IDF models and DistilBERT move together across seeds (seed 2 is hard for every
-  model, seeds 3 and 4 are easy), so much of the spread likely comes from which ads land in the test
-  split rather than from the model (not tested separately).
-- Cost per seed (mean seconds in the fit-time table): DistilBERT about 7 minutes on one GPU; the
-  tuned TF-IDF logistic regressions 1 to 1.5 minutes; the tuned TF-IDF MLP about 7 minutes. The
-  logistic regressions match DistilBERT's PR-AUC at a fraction of the time.
-- The best epoch on validation varied: epoch 5 for seeds 0, 3 and 4, epoch 4 for seed 1, epoch 3
-  for seed 2. Validation PR-AUC flattens after epoch 3 to 4, so more epochs would add little.
-- The validation-chosen threshold of DistilBERT is unstable (0.26 to 0.95 across seeds), which
-  affects its F1 (0.77 on average) but not PR-AUC.
-- Not measured: how many ads exceed 256 tokens, so the truncation cost is unknown.
+Pending: DistilBERT is being rerun on the GPU server (its classification head is now seeded, so
+the five seeds are reproducible) together with the new zero-shot language model. The findings are
+written from those results once they are back.
 """),
 ]
 
@@ -1109,13 +1210,14 @@ at 256 tokens, best epoch on validation kept).
 
 NB3 = [
     ("md", """
-# Deep learning: frozen embeddings and fine-tuned DistilBERT (notebook 03)
+# Deep learning: frozen embeddings, fine-tuned DistilBERT, zero-shot LLM (notebook 03)
 
 Session 7 order: first freeze a pretrained encoder and train only a small head on its
-embeddings (cheap, cached), then fine-tune the whole encoder (expensive). Each model is scored
+embeddings (cheap, cached), then fine-tune the whole encoder (expensive). Last, a zero-shot
+language model (Session 8) answers "is this ad fraudulent?" with no training at all. Each model is scored
 once on test per (model, seed) on the same five splits as notebook 02; comparing and plotting
 the saved results is notebook 04. Heavy cells need a GPU and the `torch`, `transformers` and
-`sentence-transformers` packages; the run cells are skipped unless `ON_GPU_SERVER = True`
+`sentence-transformers` packages (plus `captum` for the explanation); the run cells are skipped unless `ON_GPU_SERVER = True`
 (set it on the server only).
 
 Run time: one DistilBERT run took about 7 minutes on one GPU at batch size 128 (measured, seed 0,
@@ -1139,6 +1241,7 @@ OUT_DEEP = "outputs/deep"
 
 EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 BERT_MODEL = "distilbert-base-uncased"
+LLM_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
 EPOCHS, BATCH_SIZE, MAX_LEN, LR = 5, 128, 256, 2e-5
 LOG_EVERY = 10  # print the loss every this many steps
 DEVICE = "cuda:1"  # which GPU to use; the server is shared, so pick an emptier one (nvidia-smi), e.g. "cuda:1"
@@ -1148,12 +1251,13 @@ DEVICE = "cuda:1"  # which GPU to use; the server is shared, so pick an emptier 
 ON_GPU_SERVER = False
 
 # Libraries present? (a missing one would make the heavy cells fail, not skip)
-HAVE_TORCH = all(importlib.util.find_spec(m) for m in ("torch", "transformers", "sentence_transformers"))
+HAVE_TORCH = all(importlib.util.find_spec(m)
+                 for m in ("torch", "transformers", "sentence_transformers", "captum"))
 HAVE_EMBEDDINGS = os.path.exists("features/" + EMBED_MODEL.replace("/", "_") + "_emb.npy")
 
 # Heavy cells need the explicit opt-in AND the libraries; the sklearn heads are light (CPU) and
 # only need the cached embeddings.
-RUN_EMBED = RUN_BERT = ON_GPU_SERVER and HAVE_TORCH
+RUN_EMBED = RUN_BERT = RUN_LLM = ON_GPU_SERVER and HAVE_TORCH
 RUN_HEADS = RUN_EMBED or HAVE_EMBEDDINGS
 print({"ON_GPU_SERVER": ON_GPU_SERVER, "torch stack": HAVE_TORCH, "cached embeddings": HAVE_EMBEDDINGS})
 
@@ -1184,10 +1288,11 @@ else:
     print("skipped: set ON_GPU_SERVER = True (GPU server only) and install torch + sentence-transformers")
 """),
     ("md", """
-## Step 2: sklearn heads on the frozen embeddings
+## Step 2: logistic regression on the frozen embeddings
 
-A logistic regression (C picked on validation PR-AUC) and a small MLP, trained on the cached
-vectors with CPU only. Each is run for all five seeds; the threshold is picked on validation and
+A logistic regression (C picked on validation PR-AUC) trained on the cached vectors with CPU only.
+It is the same classifier as the TF-IDF logistic regression in notebook 02, so the pair compares
+the text representation alone. Run for all five seeds; the threshold is picked on validation and
 the test rows are scored once.
 """),
     ("code", """
@@ -1202,12 +1307,30 @@ else:
 The whole encoder is trained with a linear classification layer on top: AdamW, learning rate
 2e-5 with warm-up and linear decay, square-root class weights in the loss, bf16 autocast on
 CUDA, and early stopping on validation PR-AUC (the best epoch's weights are restored). Texts
-are truncated to 256 tokens. `BERT_SEEDS` lists the seeds to fine-tune; finished ones are skipped
+are truncated to 256 tokens. `BERT_SEEDS` lists the seeds to fine-tune; finished ones are skipped.
+
+Model explanation: right after seed 0 is trained, Integrated Gradients scores how much each token
+pushed the model towards fraud, for 10 seed-0 test ads (4 caught frauds, 3 missed frauds, 3 false
+alarms). They are saved next to the results and shown in notebook 04.
 """),
     ("code", """
 if RUN_BERT:
     dr.run_bert(df, BERT_SEEDS, OUT_DEEP, DEVICE, BERT_MODEL, epochs=EPOCHS,
                 batch_size=BATCH_SIZE, max_len=MAX_LEN, lr=LR, log_every=LOG_EVERY)
+else:
+    print("skipped: set ON_GPU_SERVER = True (GPU server only) and install torch + transformers")
+"""),
+    ("md", """
+## Step 4: zero-shot language model
+
+`Qwen2.5-1.5B-Instruct` reads each ad (cut to 512 tokens) in a short Yes/No prompt; the fraud
+score is its probability of answering "Yes" (renormalised over Yes and No). Nothing is trained,
+so every ad is scored once and the scores are cached in `features/`; each seed then only picks
+its threshold on validation and scores its test rows, like every other model.
+"""),
+    ("code", """
+if RUN_LLM:
+    dr.run_zero_shot(df, SEEDS, OUT_DEEP, DEVICE, LLM_MODEL)
 else:
     print("skipped: set ON_GPU_SERVER = True (GPU server only) and install torch + transformers")
 """),

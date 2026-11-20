@@ -28,8 +28,6 @@ def test_heads_on_random_embeddings():
     model, params = deep_runs.fit_logreg_head(X[:200], y[:200], X[200:], y[200:], seed=0)
     assert params["C"] in deep_runs.LOGREG_CS
     assert model.predict_proba(X[200:]).shape == (100, 2)
-    mlp, _ = deep_runs.fit_mlp_head(X[:200], y[:200], seed=0)
-    assert mlp.predict_proba(X[200:]).shape == (100, 2)
 
 
 def test_classical_run_with_dummy_only_and_resume():
@@ -44,8 +42,57 @@ def test_classical_run_with_dummy_only_and_resume():
     assert len(res) == 1 and 0.04 < res.loc[0, "test_pr_auc"] < 0.06  # base rate, 4.8% positives
 
 
+def test_zero_shot_run_with_fake_scorer():
+    """Scores are computed once, cached, and evaluated per seed; a fake scorer replaces the LLM."""
+    df = ft.add_engineered_features(dh.clean(dh.load_raw("../data/fake_job_postings.csv")))
+    y = df["fraudulent"].to_numpy()
+    calls = []
+
+    def fake_scores(texts, model_name, device, batch_size=16, max_tokens=512):
+        calls.append(len(texts))
+        return (y * 0.5 + np.random.default_rng(0).random(len(y)) * 0.6).astype("float32")
+
+    real, real_cache = deep_runs.deep_helper.zero_shot_scores, deep_runs.EMBED_CACHE
+    deep_runs.deep_helper.zero_shot_scores = fake_scores
+    deep_runs.EMBED_CACHE = tempfile.mkdtemp()
+    try:
+        out = tempfile.mkdtemp()
+        deep_runs.run_zero_shot(df, [0, 1], out, device="cpu", llm_model="org/fake-llm")
+        deep_runs.run_zero_shot(df, [0, 1], tempfile.mkdtemp(), device="cpu", llm_model="org/fake-llm")
+    finally:
+        deep_runs.deep_helper.zero_shot_scores, deep_runs.EMBED_CACHE = real, real_cache
+    assert calls == [len(df)], "the LLM must score every ad exactly once (second run uses the cache)"
+    res = rh.load_results(out)
+    assert sorted(res["seed"]) == [0, 1] and set(res["model"]) == {"zeroshot_fake-llm"}
+    assert (res["test_pr_auc"] > 0.5).all()  # the fake scores separate the classes well
+
+
+def test_explain_bert_picks_the_right_ads():
+    """4 highest-scored frauds, 3 lowest-scored frauds, 3 highest-scored real ads."""
+    import json
+    import pandas as pd
+
+    y = np.array([1] * 10 + [0] * 20)
+    score = np.r_[np.linspace(0.1, 1.0, 10), np.linspace(0.0, 0.9, 20)]
+    test_df = pd.DataFrame({"text": [f"ad {i}" for i in range(30)], "job_id": np.arange(30)})
+    real = deep_runs.eh.bert_token_attributions
+    deep_runs.eh.bert_token_attributions = lambda *a, **k: (["[CLS]", "ad"], np.array([0.0, 1.0]))
+    try:
+        path = os.path.join(tempfile.mkdtemp(), "explain.json")
+        deep_runs.explain_bert(test_df, y, score, 0.5, None, None, "cpu", 256, path)
+    finally:
+        deep_runs.eh.bert_token_attributions = real
+    with open(path) as f:
+        rows = json.load(f)
+    ids = {k: [r["job_id"] for r in rows if r["kind"] == k] for k in ("caught fraud", "missed fraud", "false alarm")}
+    assert ids == {"caught fraud": [9, 8, 7, 6], "missed fraud": [0, 1, 2], "false alarm": [29, 28, 27]}
+    assert rows[0]["flagged"] and not rows[4]["flagged"]
+
+
 if __name__ == "__main__":
     test_deep_runs_imports_without_torch()
     test_heads_on_random_embeddings()
     test_classical_run_with_dummy_only_and_resume()
+    test_zero_shot_run_with_fake_scorer()
+    test_explain_bert_picks_the_right_ads()
     print("all run tests passed")

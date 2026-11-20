@@ -14,7 +14,7 @@ from modules import eval_helper as ev
 from modules import models as md
 from modules import results_helper as rh
 
-ALL_MODELS = ["dummy_majority", "dummy_stratified", "logreg", "logreg_bm25", "tree", "mlp"]
+ALL_MODELS = ["dummy_majority", "logreg", "logreg_bm25", "tree", "mlp", "cnb", "ocsvm"]
 
 
 def get_splits(df, seed, split_dir="splits"):
@@ -55,7 +55,12 @@ def run_one(name, seed, parts, out_dir, n_iter, cv, n_jobs):
 
     # Scores on every split, then the threshold from validation and the metrics at it.
     s_train, s_val, s_test = (ev.score_of(model, p) for p in parts)
-    thr = ev.pick_threshold(y_val, s_val)          # chosen on validation only
+    # Dummies give the same score to every row, so a max-F1 threshold would flag
+    # everything as fraud; 0.5 keeps their own predictions (all-real for majority).
+    if name.startswith("dummy"):
+        thr = 0.5
+    else:
+        thr = ev.pick_threshold(y_val, s_val)      # chosen on validation only
     val_m = ev.evaluate(y_val, s_val, thr)
     test_m = ev.evaluate(y_test, s_test, thr)       # the test rows are scored once, here
     seconds = round(time.time() - start, 1)

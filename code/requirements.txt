@@ -16,7 +16,9 @@ joblib>=1.3
 nbformat>=5.9
 jupyter
 
-# Optional, only for modules/deep_helper.py (run on Colab, not on the laptop).
+# Optional, only for the deep-learning modules (GPU server only, never the laptop).
 # Not installed in the local .venv and never run locally.
 # torch
 # sentence-transformers
+# transformers
+# captum          (Integrated Gradients for the DistilBERT explanation)

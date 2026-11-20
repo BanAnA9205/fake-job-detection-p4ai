@@ -1,0 +1,35 @@
+{
+  "model": "ocsvm",
+  "group": "classical",
+  "seed": 3,
+  "thr": -1.7677728030524236,
+  "val": {
+    "precision": 0.0889487870619946,
+    "recall": 0.19298245614035087,
+    "f1": 0.12177121771217712,
+    "tp": 33,
+    "fp": 338,
+    "fn": 138,
+    "tn": 3011,
+    "pr_auc": 0.06641574095576533,
+    "roc_auc": 0.5495888621723514
+  },
+  "test": {
+    "precision": 0.05013192612137203,
+    "recall": 0.1111111111111111,
+    "f1": 0.06909090909090909,
+    "tp": 19,
+    "fp": 360,
+    "fn": 152,
+    "tn": 2989,
+    "pr_auc": 0.05130511223630456,
+    "roc_auc": 0.4649742700535553
+  },
+  "train_pr_auc": 0.08170035150111879,
+  "best_params": {
+    "clf__detector__svm__nu": 0.1,
+    "clf__detector__svd__n_components": 200
+  },
+  "seconds": 123.5,
+  "notes": "tuned with 4 random candidates, 3-fold grouped CV; cv PR-AUC 0.0876633026904249; warnings: none"
+}

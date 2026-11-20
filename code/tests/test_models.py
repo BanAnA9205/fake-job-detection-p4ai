@@ -91,7 +91,7 @@ def test_baselines():
 
 def test_models_are_named_pipelines():
     models = models_mod.get_models()
-    assert set(models) == {"logreg", "logreg_bm25", "tree", "mlp"}
+    assert set(models) == {"logreg", "logreg_bm25", "tree", "mlp", "cnb", "ocsvm"}
     for name, pipe in models.items():
         assert isinstance(pipe, Pipeline), name
         assert [step for step, _ in pipe.steps] == ["pre", "clf"], name
@@ -114,11 +114,29 @@ def test_every_model_fits_and_scores():
     # (its early stopping would hold out only 6 rows, too few to learn from).
     small = {"pre__text__min_df": 1, "clf__early_stopping": False, "clf__max_iter": 300}
     for name, pipe in models_mod.get_models().items():
+        if name == "ocsvm":
+            continue  # unsupervised, no predict_proba: tested on its own below
         pipe.set_params(**{k: v for k, v in small.items() if k in pipe.get_params()})
         pipe.fit(X, y)
         score = pipe.predict_proba(X)[:, 1]
         assert score.shape == (len(df),), name
         assert score[y == 1].mean() > score[y == 0].mean() + 0.2, name
+
+
+def test_one_class_detector_scores_outliers_higher():
+    """Fit on label-0 rows only; points far from them must get the higher (fraud) score."""
+    from sklearn.svm import OneClassSVM
+
+    rng = np.random.default_rng(0)
+    normal = rng.normal(0, 1, size=(200, 2))
+    outliers = rng.normal(6, 1, size=(20, 2))
+    X = np.vstack([normal, outliers])
+    y = np.r_[np.zeros(200, int), np.ones(20, int)]
+    det = models_mod.OneClassDetector(OneClassSVM(nu=0.05, gamma="scale")).fit(X, y)
+    assert det.detector_.fit_status_ == 0
+    assert det.detector_.support_vectors_.max() < 5, "fraud rows must not be used for fitting"
+    score = det.decision_function(X)
+    assert score[y == 1].min() > np.median(score[y == 0])
 
 
 def test_tune_returns_fitted_search():

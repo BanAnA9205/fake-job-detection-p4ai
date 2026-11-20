@@ -1,21 +1,44 @@
 """Baselines, candidate models, tuning grids and the grouped CV search helper."""
 
+import numpy as np
+from sklearn.base import BaseEstimator, ClassifierMixin, clone
+from sklearn.decomposition import TruncatedSVD
 from sklearn.dummy import DummyClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import RandomizedSearchCV, StratifiedGroupKFold
+from sklearn.naive_bayes import ComplementNB
 from sklearn.neural_network import MLPClassifier
 from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import Normalizer
+from sklearn.svm import OneClassSVM
 from sklearn.tree import DecisionTreeClassifier
 
 from modules.features import make_preprocessor
 
 
 def get_baselines(seed=0):
-    """The two dumb reference models that every real model must beat."""
-    return {
-        "dummy_majority": DummyClassifier(strategy="most_frequent", random_state=seed),
-        "dummy_stratified": DummyClassifier(strategy="stratified", random_state=seed),
-    }
+    """The dumb reference model that every real model must beat."""
+    return {"dummy_majority": DummyClassifier(strategy="most_frequent", random_state=seed)}
+
+
+class OneClassDetector(ClassifierMixin, BaseEstimator):
+    """Anomaly detection as a fraud score: fit on real ads only, score = how unusual an ad is.
+
+    The labels are used only to keep the real ads; the detector never sees a fraud example.
+    """
+
+    def __init__(self, detector):
+        self.detector = detector
+
+    def fit(self, X, y):
+        # Learn what a normal (real) ad looks like from the real training ads only.
+        self.detector_ = clone(self.detector).fit(X[np.asarray(y) == 0])
+        self.classes_ = np.array([0, 1])
+        return self
+
+    def decision_function(self, X):
+        # OneClassSVM gives high scores to normal points, so flip the sign: high = unusual = fraud.
+        return -self.detector_.decision_function(X)
 
 
 def _logreg(seed):
@@ -25,10 +48,10 @@ def _logreg(seed):
 
 
 def get_models(seed=0):
-    """Four candidate pipelines. Each is preprocessing ("pre") followed by a classifier ("clf").
+    """Six candidate pipelines. Each is preprocessing ("pre") followed by a classifier ("clf").
 
     logreg and logreg_bm25 differ only in how words are weighted, so the pair isolates
-    TF-IDF versus BM25. tree and mlp use the TF-IDF features.
+    TF-IDF versus BM25. tree, mlp, cnb and ocsvm use the TF-IDF features.
     """
     return {
         "logreg": Pipeline([("pre", make_preprocessor("tfidf")), ("clf", _logreg(seed))]),
@@ -44,6 +67,19 @@ def get_models(seed=0):
             # validation later, which handles the imbalance for ranking-based scores.
             ("clf", MLPClassifier(hidden_layer_sizes=(128,), early_stopping=True,
                                   n_iter_no_change=5, max_iter=100, random_state=seed)),
+        ]),
+        # Classic text baseline. ComplementNB is the Naive Bayes variant meant for imbalanced
+        # classes; it needs non-negative inputs, which the shared preprocessor produces.
+        "cnb": Pipeline([("pre", make_preprocessor("tfidf")), ("clf", ComplementNB())]),
+        # Unsupervised: RBF kernels need dense, low-dimensional input, so TF-IDF is first
+        # reduced with SVD (as in LSA) and each row rescaled to unit length.
+        "ocsvm": Pipeline([
+            ("pre", make_preprocessor("tfidf")),
+            ("clf", OneClassDetector(Pipeline([
+                ("svd", TruncatedSVD(n_components=200, random_state=seed)),
+                ("norm", Normalizer()),
+                ("svm", OneClassSVM(kernel="rbf", gamma="scale")),
+            ]))),
         ]),
     }
 
@@ -68,6 +104,15 @@ PARAM_GRIDS = {
     "mlp": {
         "clf__hidden_layer_sizes": [(64,), (128,), (256,)],
         "clf__alpha": [1e-4, 1e-3, 1e-2],
+    },
+    "cnb": {
+        "clf__alpha": [0.01, 0.1, 0.3, 1.0],
+        "pre__text__max_features": [10000, 30000],
+    },
+    # nu is roughly the share of training ads allowed to look unusual.
+    "ocsvm": {
+        "clf__detector__svm__nu": [0.01, 0.05, 0.1, 0.2],
+        "clf__detector__svd__n_components": [100, 200],
     },
 }
 

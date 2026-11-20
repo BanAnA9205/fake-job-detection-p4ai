@@ -20,7 +20,9 @@ from modules.data_helper import (
     audit,
     clean,
     load_raw,
+    load_splits,
     make_splits,
+    save_splits,
     seed_everything,
 )
 
@@ -193,6 +195,26 @@ def test_make_splits():
 def test_make_splits_rejects_tiny_data():
     small = clean(make_frame(n_groups=3, per_group=4, pos_per_group=1))
     expect_error(ValueError, lambda: make_splits(small))
+
+
+def test_make_splits_rejects_unbalanced_data():
+    frame = make_frame(n_groups=10, per_group=10, pos_per_group=2)
+    frame["fraudulent"] = 0
+    frame.loc[frame.index[:10], "fraudulent"] = 1  # every positive sits in one group
+    expect_error(ValueError, lambda: make_splits(clean(frame)))
+
+
+def test_save_load_splits_roundtrip():
+    cleaned = clean(make_frame())
+    splits = make_splits(cleaned, seed=5)
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "splits.npz")
+        save_splits(path, splits, cleaned)
+        loaded = load_splits(path, cleaned)
+        # Splits saved for one frame must be refused for a frame with a row removed.
+        changed = cleaned.iloc[1:].reset_index(drop=True)
+        expect_error(AssertionError, lambda: load_splits(path, changed))
+    assert all(np.array_equal(splits[k], loaded[k]) for k in ("train", "val", "test"))
 
 
 def test_seed_everything():

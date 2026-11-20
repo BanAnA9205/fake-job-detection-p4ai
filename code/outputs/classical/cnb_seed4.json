@@ -1,0 +1,35 @@
+{
+  "model": "cnb",
+  "group": "classical",
+  "seed": 4,
+  "thr": 0.9896881953262101,
+  "val": {
+    "precision": 0.7887323943661971,
+    "recall": 0.6549707602339181,
+    "f1": 0.7156549520766773,
+    "tp": 112,
+    "fp": 30,
+    "fn": 59,
+    "tn": 3319,
+    "pr_auc": 0.7730975651069975,
+    "roc_auc": 0.9751728280589999
+  },
+  "test": {
+    "precision": 0.8442622950819673,
+    "recall": 0.6023391812865497,
+    "f1": 0.7030716723549488,
+    "tp": 103,
+    "fp": 19,
+    "fn": 68,
+    "tn": 3330,
+    "pr_auc": 0.8079056573183004,
+    "roc_auc": 0.9736274597112867
+  },
+  "train_pr_auc": 0.9168315985621234,
+  "best_params": {
+    "pre__text__max_features": 10000,
+    "clf__alpha": 0.01
+  },
+  "seconds": 74.2,
+  "notes": "tuned with 4 random candidates, 3-fold grouped CV; cv PR-AUC 0.7255731770025857; warnings: none"
+}

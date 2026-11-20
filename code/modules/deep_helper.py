@@ -60,3 +60,46 @@ def embed_texts(
     np.save(emb_path, emb)
     np.save(ids_path, ids)
     return emb
+
+
+ZERO_SHOT_PROMPT = (
+    "You screen online job advertisements for recruitment fraud. "
+    "Fraudulent ads are fake postings meant to collect money or personal data.\n\n"
+    "Job ad:\n{ad}\n\n"
+    "Is this job ad fraudulent? Answer Yes or No."
+)
+
+
+def zero_shot_scores(texts, model_name, device, batch_size=16, max_tokens=512):
+    """P(fraud) from an instruction-tuned language model asked a Yes/No question, no training.
+
+    The score is the model's probability of answering "Yes", renormalised over the two
+    answers "Yes" and "No", read from the next-token logits (no text is generated).
+    """
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    # Left padding keeps the last position of every row at the end of its prompt.
+    tok = AutoTokenizer.from_pretrained(model_name, padding_side="left")
+    model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.bfloat16)
+    model = model.to(device).eval()
+    answer_ids = [tok.encode(a, add_special_tokens=False)[0] for a in ("Yes", "No")]
+
+    scores = []
+    for i in range(0, len(texts), batch_size):
+        # Cut each ad to max_tokens tokens, then wrap it in the model's chat template.
+        prompts = []
+        for text in texts[i:i + batch_size]:
+            ad = tok.decode(tok.encode(text, add_special_tokens=False)[:max_tokens])
+            messages = [{"role": "user", "content": ZERO_SHOT_PROMPT.format(ad=ad)}]
+            prompts.append(tok.apply_chat_template(messages, tokenize=False,
+                                                   add_generation_prompt=True))
+
+        # One forward pass; keep the logits of "Yes" and "No" at the last position.
+        enc = tok(prompts, return_tensors="pt", padding=True).to(device)
+        with torch.no_grad():
+            logits = model(**enc).logits[:, -1, answer_ids].float()
+        scores.append(torch.softmax(logits, dim=-1)[:, 0].cpu().numpy())
+        if i % (batch_size * 50) == 0:
+            print(f"  zero-shot {i + len(prompts)}/{len(texts)}", flush=True)
+    return np.concatenate(scores).astype(np.float32)
