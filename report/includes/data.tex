@@ -10,24 +10,41 @@ emails and phone numbers are already replaced by hashed placeholders. Each step 
 (notebook \texttt{01}, on the 17,880 raw ads) answered a question that fixed a later design
 decision, as summarised in Table~\ref{tab:eda}.
 
-The 866 fraudulent ads (4.84\%) make accuracy useless, so we use PR-AUC, choose the decision
-threshold on validation, and weight the loss rather than resample. 281 rows are exact duplicates
-and 4,552 rows share their description with another row (up to 380 ads per description), so the
-data must be split by description, not by row. Missing fields are a signal rather than noise
-(Figure~\ref{fig:flags}): a company profile is missing in 67.8\% of fraudulent ads against 16.0\% of
-real ones, and fraudulent ads more often lack a logo and contain money words or contact details.
-Finally, some countries have no fraud at all over hundreds of ads (Greece, 940 ads), which is more
-likely a property of how EMSCAD was collected than of the job markets; we keep the feature but
-check in Section~\ref{explain} how much the models rely on it.
+Figure~\ref{fig:eda} summarises the main findings. Only 866 ads (4.84\%) are fraudulent
+(panel a), which makes accuracy useless, so we use PR-AUC, choose the decision threshold on
+validation, and weight the loss rather than resample. Many ads repeat (panel b): 281 rows are exact
+duplicates, and 4,552 rows share their description with at least one other row, up to 380 copies
+of one template. Shared descriptions are also more often fraudulent (7.3\% against 4.0\% for unique
+ones), so a random split would let models score by recognising copies; the data must be split by
+description, not by row. Fraudulent descriptions tend to be somewhat shorter (panel c, median 845
+against 1,027 characters), a weak signal that the length features capture. Finally, fraud rates
+vary strongly by country (panel d): Australia reaches 18.7\%, while Greece, Germany and several
+other countries have no fraud at all over hundreds of ads. This is more likely a property of how
+EMSCAD was collected than of the job markets, so we keep the feature but check in
+Section~\ref{explain} how much the models rely on it.
 
-\begin{figure}[tb]
+\begin{figure}[htbp]
 \centering
-\includegraphics[width=0.72\linewidth]{eda_flags.pdf}
+\includegraphics[width=0.92\linewidth]{eda_overview.pdf}
+\caption{Exploration of the 17,880 raw ads: (a) class balance; (b) ads by the number of ads sharing
+their description; (c) description length per class, each bin as a share of the class; (d) fraud
+rate for the countries with at least 100 ads (ISO codes; the dashed line is the overall rate).}
+\label{fig:eda}
+\end{figure}
+
+Missing fields are a signal rather than noise (Figure~\ref{fig:flags}). A company profile is
+missing in 67.8\% of fraudulent ads against 16.0\% of real ones, and fraudulent ads more often lack
+a logo and contain money words or contact details, so we keep a missing-value flag per field
+instead of imputing the gaps away.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.62\linewidth]{eda_flags.pdf}
 \caption{Share of ads in which each flag is set, real versus fraudulent (17,880 raw ads).}
 \label{fig:flags}
 \end{figure}
 
-\begin{table}[tb]
+\begin{table}[htbp]
 \centering
 \small
 \begin{tabular}{>{\raggedright\arraybackslash}p{0.40\linewidth}>{\raggedright\arraybackslash}p{0.52\linewidth}}
@@ -56,7 +73,7 @@ The five text fields are joined into one column, and a \texttt{ColumnTransformer
 training rows only, builds the feature matrix of Table~\ref{tab:features}. TF-IDF weighs each word
 by how often it occurs in the ad and how rare it is across ads.
 
-\begin{table}[tb]
+\begin{table}[htbp]
 \centering
 \small
 \begin{tabular}{l>{\raggedright\arraybackslash}p{0.55\linewidth}r}

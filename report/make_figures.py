@@ -186,11 +186,78 @@ def write_ig_table(k=5):
     print("wrote tab_ig.tex")
 
 
+def fig_eda():
+    """Four exploration panels on the raw data (as in notebook 01): balance, duplicates, length, country."""
+    df = ft.add_engineered_features(dh.load_raw("../data/fake_job_postings.csv"))
+    y = df["fraudulent"]
+    fig, axes = plt.subplots(2, 2, figsize=(7.2, 5.2))
+
+    # (a) Class balance.
+    ax = axes[0, 0]
+    counts = y.value_counts().reindex([0, 1])
+    ax.barh(["real", "fraud"], counts.values, color=[BLUE, ORANGE], height=0.6)
+    for i, n in enumerate(counts.values):
+        ax.text(n + 200, i, f"{n:,} ({n / len(y):.1%})", va="center", color=INK, fontsize=8)
+    ax.set_xlim(0, 23000)
+    ax.set_title("(a) Class balance", loc="left", fontsize=9)
+    ax.set_xlabel("ads")
+    ax.grid(axis="y", visible=False)
+
+    # (b) Ads by the size of their description group (normalised description, as notebook 01).
+    ax = axes[0, 1]
+    desc = (df["description"].fillna("").astype(str).str.lower()
+            .str.replace(r"\s+", " ", regex=True).str.strip())
+    size = desc.map(desc.value_counts())
+    bins = [("1", size == 1), ("2-5", size.between(2, 5)), ("6-50", size.between(6, 50)),
+            ("51+", size > 50)]
+    labels, n_ads = [b[0] for b in bins], [int(m.sum()) for _, m in bins]
+    ax.bar(labels, n_ads, color=BLUE, width=0.6)
+    for i, n in enumerate(n_ads):
+        ax.text(i, n * 1.15, f"{n:,}", ha="center", color=INK, fontsize=8)
+    ax.set_yscale("log")
+    ax.set_ylim(100, 60000)
+    ax.set_title("(b) Ads by size of their description group", loc="left", fontsize=9)
+    ax.set_xlabel("ads sharing the same description")
+    ax.set_ylabel("ads (log scale)")
+    ax.grid(axis="x", visible=False)
+
+    # (c) Description length by class (densities, log x).
+    ax = axes[1, 0]
+    lens = df["description"].fillna("").str.len()
+    edges = np.logspace(1, np.log10(lens.max()), 35)
+    for label, c, name in ((0, BLUE, "real"), (1, ORANGE, "fraud")):
+        v = lens[(y == label) & (lens > 0)]
+        # Each bin as a share of the class's ads, so both classes are comparable on a log axis.
+        ax.hist(v, bins=edges, weights=np.full(len(v), 1 / len(v)), histtype="step",
+                color=c, linewidth=1.8, label=name)
+    ax.set_xscale("log")
+    ax.set_title("(c) Description length", loc="left", fontsize=9)
+    ax.set_xlabel("characters (log scale)")
+    ax.set_ylabel("share of the class's ads")
+    ax.legend(loc="upper left")
+
+    # (d) Fraud rate by country (countries with at least 100 ads).
+    ax = axes[1, 1]
+    rate = df.groupby("country")["fraudulent"].agg(["size", "mean"])
+    rate = rate[rate["size"] >= 100].sort_values("mean")
+    ax.barh(rate.index, rate["mean"], color=ORANGE, height=0.6)
+    ax.axvline(y.mean(), color=GRAY, linestyle="--", linewidth=1)
+    ax.text(y.mean() + 0.004, -0.9, "overall", color=MUTED, fontsize=7)
+    ax.set_title("(d) Fraud rate by country (100+ ads)", loc="left", fontsize=9)
+    ax.set_xlabel("share of fraudulent ads")
+    ax.tick_params(axis="y", labelsize=7)
+    ax.grid(axis="y", visible=False)
+
+    fig.tight_layout()
+    save(fig, "eda_overview.pdf")
+
+
 if __name__ == "__main__":
     res = rh.load_results("outputs/classical", "outputs/deep", "outputs/stack")
     # The report's tables and the per-seed figure show only the models the report is about;
     # the other models are reported in the text.
     res = res[res["model"].isin(MAIN)]
+    fig_eda()
     fig_flags()
     fig_seeds(res)
     write_tables(res)
