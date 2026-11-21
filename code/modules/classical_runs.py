@@ -16,7 +16,7 @@ from modules import eval_helper as ev
 from modules import models as md
 from modules import results_helper as rh
 
-ALL_MODELS = ["dummy_majority", "logreg", "logreg_bm25", "mlp", "cnb", "ocsvm"]
+ALL_MODELS = ["dummy_majority", "logreg", "ocsvm"]
 
 
 def get_splits(df, seed, split_dir="splits"):

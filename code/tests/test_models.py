@@ -90,7 +90,7 @@ def test_baselines():
 
 def test_models_are_named_pipelines():
     models = models_mod.get_models()
-    assert set(models) == {"logreg", "logreg_bm25", "mlp", "cnb", "ocsvm"}
+    assert set(models) == {"logreg", "ocsvm"}
     for name, pipe in models.items():
         assert isinstance(pipe, Pipeline), name
         assert [step for step, _ in pipe.steps] == ["pre", "clf"], name
@@ -109,9 +109,7 @@ def test_every_model_fits_and_scores():
     """Each pipeline learns the toy spam/normal split and ranks spam above normal."""
     df, X = _xy()
     y = df["fraudulent"].to_numpy()
-    # Toy-sized overrides: keep every word, and let the MLP train on all 60 rows
-    # (its early stopping would hold out only 6 rows, too few to learn from).
-    small = {"pre__text__min_df": 1, "clf__early_stopping": False, "clf__max_iter": 300}
+    small = {"pre__text__min_df": 1}  # toy-sized data: keep every word
     for name, pipe in models_mod.get_models().items():
         if name == "ocsvm":
             continue  # unsupervised, no predict_proba: tested on its own below

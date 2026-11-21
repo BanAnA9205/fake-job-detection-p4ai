@@ -39,8 +39,4 @@ of DistilBERT's and TF-IDF logistic regression's saved scores. It is fitted on t
 because both models are over-confident on their own training rows, and its threshold comes from
 grouped out-of-fold predictions inside the validation rows.
 
-\textbf{Other models} were run through the same protocol for comparison and are reported briefly:
-BM25 logistic regression~\cite{robertson2009}, an MLP, Complement Naive Bayes~\cite{rennie2003},
-frozen MiniLM sentence embeddings~\cite{reimers2019,wang2020minilm} with logistic regression, and
-a zero-shot Qwen2.5-1.5B language model~\cite{qwen2024} asked whether each ad is fraudulent. The
-classical models use scikit-learn~\cite{pedregosa2011}.
+The models use scikit-learn~\cite{pedregosa2011}.

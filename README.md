@@ -1,10 +1,9 @@
 # Fake job posting detection (EMSCAD), course project
 
 Binary classification of job ads (fraudulent vs real) on the public EMSCAD dataset (Kaggle copy, CC0).
-Classical branch: TF-IDF or BM25 + engineered features with logistic regression, an MLP and Complement Naive
-Bayes, plus an unsupervised one-class SVM on the text (anomaly detection view).
-Deep branch: frozen sentence embeddings with a logistic-regression head, a fine-tuned DistilBERT (explained with
-Integrated Gradients), and a zero-shot instruction-tuned LLM (Qwen2.5-1.5B-Instruct).
+Classical branch: logistic regression on TF-IDF + engineered features, plus an unsupervised one-class SVM on
+the TF-IDF text (anomaly detection view).
+Deep branch: a fine-tuned DistilBERT, explained with Integrated Gradients.
 Combination: a stack of DistilBERT and TF-IDF logistic regression (logistic regression on their saved scores).
 
 - `data/fake_job_postings.csv`  17,880 rows, 18 columns, target `fraudulent` (866 positives)

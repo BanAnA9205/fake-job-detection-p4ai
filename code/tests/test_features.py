@@ -121,7 +121,7 @@ def test_sparse_flag_guard_drops_constant_flags():
     df = add_engineered_features(_toy_df(40))
     df.loc[:19, "has_email"] = 0           # make sure it is constant
     df.loc[:, "has_url"] = [1, 0] * 20     # fires on half the rows
-    pre = make_preprocessor("tfidf").fit(df)
+    pre = make_preprocessor().fit(df)
     names = list(pre.get_feature_names_out())
     assert "binary__has_url" in names
     assert "binary__has_email" not in names
@@ -139,7 +139,7 @@ def test_new_columns_have_no_nan():
 
 def test_tfidf_preprocessor_shape_and_names():
     df = add_engineered_features(_toy_df(12))
-    pre = make_preprocessor("tfidf", max_features=500, ngram_range=(1, 1), min_df=2)
+    pre = make_preprocessor(max_features=500, ngram_range=(1, 1), min_df=2)
     X = pre.fit_transform(df)
     assert X.shape[0] == len(df)
     assert X.shape[1] > 0
@@ -165,7 +165,7 @@ def test_ordinal_codes_are_ordered():
     df.loc[3, "required_experience"] = np.nan
     df.loc[4, "required_experience"] = "Alien"
     df.loc[5, "required_education"] = "Doctorate"
-    pre = make_preprocessor("tfidf")
+    pre = make_preprocessor()
     X = pre.fit_transform(df)
     X = X.toarray() if sparse.issparse(X) else np.asarray(X)
     assert not np.isnan(X).any()
@@ -181,7 +181,7 @@ def test_ordinal_codes_are_ordered():
 
 def test_unseen_nominal_category_transforms():
     df = add_engineered_features(_toy_df(12))
-    pre = make_preprocessor("tfidf")
+    pre = make_preprocessor()
     pre.fit(df)
     other = df.iloc[:2].copy()
     other["employment_type"] = "Temporary"
@@ -189,38 +189,6 @@ def test_unseen_nominal_category_transforms():
     X = pre.transform(other)
     assert X.shape[0] == 2
     assert not np.isnan(X).any()
-
-
-def test_bm25_known_answer():
-    """Hand-computed BM25 on a 3-ad count matrix (k1=1.5, b=0.75)."""
-    from modules.features import Bm25Transformer
-    counts = np.array([[2, 0], [1, 1], [0, 3]])  # ad lengths 2, 2, 3; average 7/3
-    bm = Bm25Transformer(k1=1.5, b=0.75).fit(sparse.csr_matrix(counts))
-    idf = np.log(1 + (3 - 2 + 0.5) / (2 + 0.5))   # both words appear in 2 of 3 ads
-    assert np.allclose(bm.idf_, [idf, idf])
-    out = bm.transform(sparse.csr_matrix(counts)).toarray()
-    avg = 7 / 3
-    tf, dl = 2.0, 2.0                              # word 0 in ad 0
-    expected = idf * tf * 2.5 / (tf + 1.5 * (1 - 0.75 + 0.75 * dl / avg))
-    assert np.isclose(out[0, 0], expected)
-    assert out[0, 1] == 0.0, "absent words stay zero"
-    assert out[2, 1] > out[1, 1], "more repeats of a word weigh more (saturating)"
-
-
-def test_bm25_preprocessor_matches_tfidf_shape():
-    df = add_engineered_features(_toy_df(12))
-    a = make_preprocessor("tfidf").fit_transform(df)
-    b = make_preprocessor("bm25").fit_transform(df)
-    b = b.toarray() if sparse.issparse(b) else np.asarray(b)
-    assert a.shape == b.shape and not np.isnan(b).any()
-
-
-def test_unknown_kind_raises():
-    try:
-        make_preprocessor("bogus")
-    except ValueError:
-        return
-    raise AssertionError("expected ValueError for an unknown kind")
 
 
 def main():

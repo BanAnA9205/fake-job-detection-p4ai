@@ -36,18 +36,13 @@ plt.rcParams.update({
 
 # Display names and families, one name per model for the whole report.
 NAMES = {
-    "logreg_bm25": "BM25 + LR", "mlp": "TF-IDF + MLP", "logreg": "TF-IDF + LR",
-    "bert_distilbert-base-uncased": "DistilBERT (fine-tuned)", "cnb": "Complement NB",
-    "emb_logreg": "MiniLM embeddings + LR",
-    "zeroshot_Qwen2.5-1.5B-Instruct": "Qwen2.5-1.5B (zero-shot)", "ocsvm": "One-class SVM",
-    "dummy_majority": "Majority dummy", "stack_bert_logreg": "Stack: DistilBERT + TF-IDF LR",
+    "logreg": "TF-IDF + LR", "bert_distilbert-base-uncased": "DistilBERT (fine-tuned)",
+    "ocsvm": "One-class SVM", "dummy_majority": "Majority dummy",
+    "stack_bert_logreg": "Stack: DistilBERT + TF-IDF LR",
 }
-SHORT = {"stack_bert_logreg": "Stack", "logreg_bm25": "BM25 LR", "logreg": "TF-IDF LR",
-         "bert_distilbert-base-uncased": "DistilBERT", "mlp": "MLP", "cnb": "Compl. NB"}
-MAIN = ["stack_bert_logreg", "logreg", "bert_distilbert-base-uncased", "ocsvm", "dummy_majority"]
-FAMILY = {"logreg_bm25": "classical", "mlp": "classical", "logreg": "classical", "cnb": "classical",
-          "bert_distilbert-base-uncased": "deep", "emb_logreg": "deep",
-          "zeroshot_Qwen2.5-1.5B-Instruct": "no labels", "ocsvm": "no labels",
+SHORT = {"stack_bert_logreg": "Stack", "logreg": "TF-IDF LR", "bert_distilbert-base-uncased": "DistilBERT"}
+MAIN = list(NAMES)
+FAMILY = {"logreg": "classical", "bert_distilbert-base-uncased": "deep", "ocsvm": "no labels",
           "dummy_majority": "no labels", "stack_bert_logreg": "stack"}
 FAMILY_COLOR = {"classical": BLUE, "deep": ORANGE, "stack": AQUA, "no labels": GRAY}
 

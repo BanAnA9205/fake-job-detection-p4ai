@@ -7,8 +7,6 @@ from sklearn.decomposition import PCA
 from sklearn.dummy import DummyClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import RandomizedSearchCV, StratifiedGroupKFold
-from sklearn.naive_bayes import ComplementNB
-from sklearn.neural_network import MLPClassifier
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import Normalizer
 from sklearn.svm import OneClassSVM
@@ -48,24 +46,12 @@ def _logreg(seed):
 
 
 def get_models(seed=0):
-    """Five candidate pipelines. Each is preprocessing ("pre") followed by a classifier ("clf").
+    """The two models: preprocessing ("pre") followed by a classifier ("clf").
 
-    logreg and logreg_bm25 differ only in how words are weighted, so the pair isolates
-    TF-IDF versus BM25. mlp and cnb use the same TF-IDF features; ocsvm uses the text only.
+    logreg uses the full TF-IDF feature matrix; ocsvm uses the TF-IDF text only.
     """
     return {
-        "logreg": Pipeline([("pre", make_preprocessor("tfidf")), ("clf", _logreg(seed))]),
-        "logreg_bm25": Pipeline([("pre", make_preprocessor("bm25")), ("clf", _logreg(seed))]),
-        "mlp": Pipeline([
-            ("pre", make_preprocessor("tfidf")),
-            # MLPClassifier has no class_weight; the decision threshold is chosen on
-            # validation later, which handles the imbalance for ranking-based scores.
-            ("clf", MLPClassifier(hidden_layer_sizes=(128,), early_stopping=True,
-                                  n_iter_no_change=5, max_iter=100, random_state=seed)),
-        ]),
-        # Classic text baseline. ComplementNB is the Naive Bayes variant meant for imbalanced
-        # classes; it needs non-negative inputs, which the shared preprocessor produces.
-        "cnb": Pipeline([("pre", make_preprocessor("tfidf")), ("clf", ComplementNB())]),
+        "logreg": Pipeline([("pre", make_preprocessor()), ("clf", _logreg(seed))]),
         # Unsupervised, text only: in the full feature matrix four numeric columns make up
         # about half of each row's length and would dominate the distances an RBF kernel uses.
         # The kernel also needs short dense input, so TF-IDF is reduced with PCA ("arpack"
@@ -83,25 +69,11 @@ def get_models(seed=0):
 
 
 # Small grids for tune(); names follow the Pipeline structure ("step__part__param").
-# In the logreg_bm25 grid the text pipeline has one more level: pre__text__bm25__k1.
 PARAM_GRIDS = {
     "logreg": {
         "clf__C": [0.1, 1, 10],
         "pre__text__max_features": [10000, 30000],
         "pre__text__ngram_range": [(1, 1), (1, 2)],
-    },
-    "logreg_bm25": {
-        "clf__C": [0.1, 1, 10],
-        "pre__text__bm25__k1": [1.2, 1.5, 2.0],
-        "pre__text__bm25__b": [0.5, 0.75, 1.0],
-    },
-    "mlp": {
-        "clf__hidden_layer_sizes": [(64,), (128,), (256,)],
-        "clf__alpha": [1e-4, 1e-3, 1e-2],
-    },
-    "cnb": {
-        "clf__alpha": [0.01, 0.1, 0.3, 1.0],
-        "pre__text__max_features": [10000, 30000],
     },
     # gamma sets how local the RBF kernel is (rows have unit length, so squared distances lie
     # between 0 and 4). A seed-0 map of the CV score showed that gamma decides almost everything:

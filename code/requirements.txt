@@ -1,4 +1,4 @@
-# Core (everything in modules/ except deep_helper.py needs only these).
+# Core (everything in modules/ except the DistilBERT parts needs only these).
 # Tested with: Python 3.14.7, numpy 2.5.4, pandas 3.1.1, scipy 1.18.1,
 # scikit-learn 1.9.1, matplotlib 3.11.2, seaborn 0.13.2, joblib 1.6.0.
 # Lower bounds below come from the APIs the code uses, NOT from testing on older versions:
@@ -19,6 +19,5 @@ jupyter
 # Optional, only for the deep-learning modules (GPU server only, never the laptop).
 # Not installed in the local .venv and never run locally.
 # torch
-# sentence-transformers
 # transformers
 # captum          (Integrated Gradients for the DistilBERT explanation)

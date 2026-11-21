@@ -63,12 +63,3 @@ of about 1.0 is not leakage: the local kernel memorises the real training ads it
 on. A supervised logistic regression on the same text and PCA features reaches a seed-0 validation
 PR-AUC of 0.662 against the one-class SVM's 0.164, so the features hold the signal and what the
 one-class SVM lacks is the labels.
-
-\subsection{Other models}
-
-BM25 logistic regression (0.847) beats TF-IDF logistic regression on all five splits. The MLP
-matches BM25 (0.846) but takes seven times as long to train as TF-IDF logistic regression, and
-Complement Naive Bayes reaches 0.773.
-Frozen MiniLM embeddings reach only 0.524, because a single summary vector loses the specific words
-that separate fraud. The zero-shot Qwen model scores 0.078, chance level: it calls 98\% of the ads
-fraudulent.
