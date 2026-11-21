@@ -12,11 +12,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 import matplotlib
 
 matplotlib.use("Agg")  # tests run headless, no window needed
-import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import precision_recall_curve
 from sklearn.svm import LinearSVC
 
 from modules.eval_helper import (

@@ -1,29 +1,8 @@
-% =============================================================================
-% Document-wide settings
-% =============================================================================
-\renewcommand\qedsymbol{$\blacksquare$}
-% \renewcommand{\thesection}{\Alph{section}} % uncomment for lettered sections (A, B, ...); arabic is the article-class default
+% Paragraph spacing of the group's lab reports.
 \setlength{\parindent}{6pt}
 \setlength{\parskip}{3pt}
-
-% =============================================================================
-% Math shorthand macros
-%
-% Kept deliberately small: each macro here saves real typing/readability
-% over the built-in LaTeX spelling (auto-sized delimiters). Prefer writing
-% \Rightarrow, \textbf, etc. directly rather than adding one-off aliases --
-% they cost readers a lookup for no real benefit.
-% =============================================================================
-\newcommand{\parens}[1]{\left( #1 \right)}
-\newcommand{\brackets}[1]{\left[ #1 \right]}
-\newcommand{\braces}[1]{\left\{ #1 \right\}}
-\newcommand{\abs}[1]{\lvert #1 \rvert}
-\newcommand{\floor}[1]{\left\lfloor #1 \right\rfloor}
-\newcommand{\ceil}[1]{\left\lceil #1 \right\rceil}
 
 % Generated table rows inside a tabular: \input is not expandable there, the primitive is.
 \newcommand{\tabinput}[1]{\@@input #1.tex }
 
-% Paragraph spacing of the group's lab reports.
-\setlength{\parindent}{6pt}
-\setlength{\parskip}{3pt}
+\endinput

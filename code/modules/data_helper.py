@@ -8,6 +8,8 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import StratifiedGroupKFold
 
+from modules import qc
+
 TARGET = "fraudulent"
 
 TEXT_COLS = ["title", "company_profile", "description", "requirements", "benefits"]
@@ -15,6 +17,9 @@ CAT_COLS = ["employment_type", "required_experience", "required_education", "ind
 BIN_COLS = ["telecommuting", "has_company_logo", "has_questions"]
 
 BALANCE_TOL = 0.01  # allowed drift of the positive rate between splits
+
+# The cleaned data (with its split groups), written once by notebook 01 and read by every later step.
+PROCESSED = "../data/processed/emscad_clean.csv.gz"
 
 
 def load_raw(path):
@@ -45,11 +50,6 @@ def _normalise_text(text):
     return " ".join(str(text).split()).lower()
 
 
-def _desc_hash(text):
-    """Stable short hash of the normalised description, used as the split group id."""
-    return hashlib.sha256(_normalise_text(text).encode("utf-8")).hexdigest()[:16]
-
-
 def _count_duplicate_conflicts(df):
     """Count duplicate blocks (same content apart from job_id) that disagree on the label."""
     cols = _content_cols(df)
@@ -76,19 +76,49 @@ def audit(df):
     }
 
 
+def _fix_text(s):
+    """Junk cells become missing, hashed placeholders become generic, glued boundaries get a space."""
+    s = s.where(~s.astype(str).str.strip().isin(qc.JUNK_VALUES))
+    s = s.str.replace(qc.PLACEHOLDER, r"#\1", regex=True)         # "#URL_3f9a..#" -> "#URL#"
+    s = s.str.replace(qc.GLUE_SENTENCE, r"\1\2 \3", regex=True)
+    return s.str.replace(qc.GLUE_WORD, r"\1 \2", regex=True)
+
+
 def clean(df):
-    """Drop exact duplicate postings, check labels agree, and tag description groups."""
-    cols = _content_cols(df)
+    """Fix the text, drop exact duplicate postings, check labels agree, and tag split groups.
+
+    Text: Excel errors and filler become missing, each hashed link/email/phone placeholder becomes
+    a generic one (a model should learn "has a phone number", not one number), and sentences glued
+    together by removed HTML are separated. Groups: see qc.group_ids.
+    """
+    out = df.copy()
+    for col in TEXT_COLS + ["department"]:
+        out[col] = _fix_text(out[col])
 
     # Duplicates with conflicting labels would make "keep the first" hide a real label error.
-    conflicts = _count_duplicate_conflicts(df)
+    conflicts = _count_duplicate_conflicts(out)
     assert conflicts == 0, f"{conflicts} duplicate blocks disagree on {TARGET}; review the data"
 
-    # Drop exact duplicates (ignoring job_id), then tag each row with its description group.
-    out = df.drop_duplicates(subset=cols, keep="first").copy()
-    out["group"] = out["description"].map(_desc_hash)
-    out = out.reset_index(drop=True)
+    # Drop exact duplicates (ignoring job_id), then tag each row with its split group.
+    out = out.drop_duplicates(subset=_content_cols(out), keep="first").reset_index(drop=True)
+    out["group"] = qc.group_ids(out)
     return out
+
+
+def save_processed(df, path=PROCESSED):
+    """Write the cleaned frame (gzip CSV; mtime=0 keeps the file identical across runs)."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    df.to_csv(path, index=False, compression={"method": "gzip", "mtime": 0})
+
+
+def load_processed(path=PROCESSED):
+    """Read the cleaned frame written by notebook 01."""
+    assert os.path.exists(path), f"{path} not found: run notebook 01 first"
+    # Text columns are read as text even when a column happens to be entirely empty.
+    text = TEXT_COLS + CAT_COLS + ["location", "department", "salary_range", "group"]
+    df = pd.read_csv(path, dtype={c: "str" for c in text})
+    assert "group" in df.columns, f"{path} has no 'group' column: it is not the cleaned data"
+    return df
 
 
 def _check_splits(splits, y, groups):
@@ -99,11 +129,11 @@ def _check_splits(splits, y, groups):
     stacked = np.concatenate([splits[n] for n in names])
     assert np.array_equal(np.sort(stacked), np.arange(len(y))), "splits must cover every row once"
 
-    # No leakage: no description group sits in two splits.
+    # No leakage: no group (shared description, company or near-copy) sits in two splits.
     for i, a in enumerate(names):
         for b in names[i + 1:]:
             shared = set(groups[splits[a]]) & set(groups[splits[b]])
-            assert not shared, f"{len(shared)} description groups appear in both {a} and {b}"
+            assert not shared, f"{len(shared)} groups appear in both {a} and {b}"
 
     # Balance: each split keeps roughly the overall positive rate.
     overall = float(y.mean())
@@ -125,7 +155,7 @@ def make_splits(df, seed=0, val_size=0.2, test_size=0.2):
     n = len(df)
 
     # Step 1: cut the test split off first (1 fold out of 1/test_size folds).
-    # StratifiedGroupKFold keeps a whole description in one split and balances the label.
+    # StratifiedGroupKFold keeps a whole group in one split and balances the label.
     n_test_folds = max(2, round(1.0 / test_size))
     outer = StratifiedGroupKFold(n_splits=n_test_folds, shuffle=True, random_state=seed)
     trainval, test = next(outer.split(np.zeros((n, 1)), y, groups))
@@ -162,8 +192,12 @@ def load_splits(path, df):
 
 
 def _fingerprint(df):
-    """Short hash of the ordered job_ids; changes if rows are dropped, added or reordered."""
-    ids = ",".join(map(str, df["job_id"].tolist()))
+    """Short hash of the ordered job_ids and their groups.
+
+    It changes if rows are dropped, added or reordered, or if the grouping changes, so splits made
+    under an older grouping are refused instead of silently reused.
+    """
+    ids = ",".join(f"{j}:{g}" for j, g in zip(df["job_id"], df["group"]))
     return hashlib.sha256(ids.encode("utf-8")).hexdigest()[:16]
 
 

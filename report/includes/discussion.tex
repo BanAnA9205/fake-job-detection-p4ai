@@ -1,12 +1,12 @@
 \section{Discussion}
 \label{discussion}
 
-Our reading of why word counts match a pretrained transformer here is that much of the fraud
-signal in EMSCAD lies in exact words: pay amounts, a few posters' templates, employer names and
+Word counts most likely match a pretrained transformer here because much of the fraud signal in
+EMSCAD lies in exact words: pay amounts, a few posters' templates, employer names and
 hashed placeholders. A sparse linear model learns such words from a handful of the 514 training
 frauds, whereas DistilBERT reads only 256 tokens and represents meaning, which helps on new
 wording but adds little where a known phrase decides. The transformer is therefore most useful as
-a second opinion, which is what the stack exploits.
+a second opinion, as the stack shows.
 
 The one-class SVM shows two sides of the data. Judged against the bulk of the real ads, frauds look
 typical, because many are repeated templates in dense regions of the text space; judged by their

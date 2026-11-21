@@ -51,18 +51,18 @@ def test_run_stack_on_the_real_split_with_fake_runs():
     y = df["fraudulent"].to_numpy()
     rng = np.random.default_rng(1)
     run_dir = tempfile.mkdtemp()
-    for name, k in (("bert_x", 0), ("logreg_bm25", 1)):
+    for name, k in (("bert_x", 0), ("logreg", 1)):
         s = _fake_scores(y, np.arange(len(y)) % 2 == k, rng)
         rh.save_result(run_dir, name, "fake", 0, 0.5, {}, {}, y[sp["val"]], s[sp["val"]],
                        y[sp["test"]], s[sp["test"]])
     out = tempfile.mkdtemp()
-    stacking.run_stack(df, [0], (run_dir, "bert_x"), (run_dir, "logreg_bm25"), out_dir=out)
+    stacking.run_stack(df, [0], (run_dir, "bert_x"), (run_dir, "logreg"), out_dir=out)
     res = rh.load_results(out)
-    assert list(res["model"]) == ["stack_bert_logreg_bm25"] and res.loc[0, "group"] == "stack"
+    assert list(res["model"]) == ["stack_bert_logreg"] and res.loc[0, "group"] == "stack"
     assert res.loc[0, "test_pr_auc"] > 0.5
-    before = os.path.getmtime(os.path.join(out, "stack_bert_logreg_bm25_seed0.json"))
-    stacking.run_stack(df, [0], (run_dir, "bert_x"), (run_dir, "logreg_bm25"), out_dir=out)
-    assert os.path.getmtime(os.path.join(out, "stack_bert_logreg_bm25_seed0.json")) == before
+    before = os.path.getmtime(os.path.join(out, "stack_bert_logreg_seed0.json"))
+    stacking.run_stack(df, [0], (run_dir, "bert_x"), (run_dir, "logreg"), out_dir=out)
+    assert os.path.getmtime(os.path.join(out, "stack_bert_logreg_seed0.json")) == before
 
 
 if __name__ == "__main__":

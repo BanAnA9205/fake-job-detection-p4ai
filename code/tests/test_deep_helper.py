@@ -42,17 +42,13 @@ def test_heavy_imports_are_lazy():
 
 
 def test_public_api_is_defined():
-    """embed_texts stays; the torch MLP head helpers and _PATIENCE must be gone."""
+    """The functions and the prompt that deep_runs relies on are defined at module level."""
     tree = ast.parse(MODULE.read_text())
     functions = {node.name for node in tree.body if isinstance(node, ast.FunctionDef)}
     assigned = {t.id for node in tree.body if isinstance(node, ast.Assign)
                 for t in node.targets if isinstance(t, ast.Name)}
-    assert "embed_texts" in functions, "missing embed_texts"
-    removed = ["make_mlp", "_train_epoch", "_val_pr_auc", "train_mlp", "predict_scores"]
-    for name in removed:
-        assert name not in functions, f"{name} should have been deleted"
-    for name in ["fine_tune_note", "_PATIENCE"]:
-        assert name not in assigned, f"{name} should have been deleted"
+    assert {"embed_texts", "zero_shot_scores"} <= functions
+    assert "ZERO_SHOT_PROMPT" in assigned
 
 
 def test_embed_texts_cache_hit():

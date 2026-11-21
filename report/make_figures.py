@@ -17,7 +17,6 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 
 from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
 
@@ -137,7 +136,7 @@ def _tex(w):
 
 def write_term_table(k=10):
     """Top coefficients of TF-IDF LR, refitted on the seed-0 training rows with its tuned settings."""
-    df = ft.add_engineered_features(dh.clean(dh.load_raw("../data/fake_job_postings.csv")))
+    df = ft.add_engineered_features(dh.load_processed())
     train = df.iloc[dh.load_splits("splits/seed0.npz", df)["train"]]
     with open("outputs/classical/logreg_seed0.json") as f:
         params = {k_: tuple(v) if isinstance(v, list) else v for k_, v in json.load(f)["best_params"].items()}
@@ -174,10 +173,15 @@ def write_ig_table(k=5):
             else:
                 words.append(t)
                 attrs.append(a)
-        keep = [(a, w) for a, w in zip(attrs, words)
-                if (w == "$" or any(c.isalnum() for c in w)) and w not in ENGLISH_STOP_WORDS]
-        top = [w if len(w) <= 16 else w[:8] + "..." for a, w in sorted(keep, reverse=True)[:k] if a > 0]
-        title = str(titles[r["job_id"]]).strip()
+        # One entry per word: a word that occurs several times gets the sum of its attributions.
+        total = {}
+        for a, w in zip(attrs, words):
+            # Keep words (and "$"); drop punctuation, stop words and one-letter fragments.
+            if (w == "$" or (len(w) > 1 and any(c.isalnum() for c in w))) and w not in ENGLISH_STOP_WORDS:
+                total[w] = total.get(w, 0.0) + a
+        ranked = sorted(total.items(), key=lambda kv: kv[1], reverse=True)[:k]
+        top = [w if len(w) <= 16 else w[:8] + "..." for w, a in ranked if a > 0]
+        title = " ".join(str(titles[r["job_id"]]).split())
         title = title if len(title) <= 26 else title[:24] + "..."
         lines.append(f"{r['kind']} & {_tex(title)} & {r['score']:.3f} & {sum(attrs):+.2f} & "
                      f"{_tex(', '.join(top))} \\\\")

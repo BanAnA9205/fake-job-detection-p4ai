@@ -6,11 +6,9 @@
 Each ad has five free-text fields (title, company profile, description, requirements, benefits),
 categorical metadata (employment type, industry, function, location, required experience and
 education) and three binary flags (telecommuting, company logo, screening questions); real URLs,
-emails and phone numbers are already replaced by hashed placeholders. Each step of the exploration
-(notebook \texttt{01}, on the 17,880 raw ads) answered a question that fixed a later design
-decision, as summarised in Table~\ref{tab:eda}.
-
-Figure~\ref{fig:eda} summarises the main findings. Only 866 ads (4.84\%) are fraudulent
+emails and phone numbers are already replaced by hashed placeholders. The exploration (notebook
+\texttt{01}, on the 17,880 raw ads) was used to fix design decisions, listed in
+Table~\ref{tab:eda}; Figure~\ref{fig:eda} shows the main findings. Only 866 ads (4.84\%) are fraudulent
 (panel a), which makes accuracy useless, so we use PR-AUC, choose the decision threshold on
 validation, and weight the loss rather than resample. Many ads repeat (panel b): 281 rows are exact
 duplicates, and 4,552 rows share their description with at least one other row, up to 380 copies

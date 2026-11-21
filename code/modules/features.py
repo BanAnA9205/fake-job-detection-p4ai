@@ -40,11 +40,12 @@ EDUCATION_LEVELS = [
 # Spam cues, kept in one regex so the flag stays easy to explain.
 MONEY_PATTERN = (r"(?:\bearn\b|\bper week\b|\bno experience\b|\bwork from home\b"
                  r"|\bwire\b|\bwestern union\b|\$)")
-# The dataset replaced real links, emails and phone numbers with placeholders such as
-# "#URL_ab12cd#", so we look for the placeholder first and for a real address second.
-URL_PATTERN = r"(?:#URL_|https?://|www\.)"
-EMAIL_PATTERN = r"(?:#EMAIL_|[\w.+-]+@[\w-]+\.[A-Za-z]{2,})"
-PHONE_PATTERN = r"#PHONE_"
+# The dataset replaced real links, emails and phone numbers with placeholders ("#URL_ab12cd#",
+# made generic "#URL#" by data_helper.clean), so we look for either form first and for a real
+# address second.
+URL_PATTERN = r"(?:#URL|https?://|www\.)"
+EMAIL_PATTERN = r"(?:#EMAIL|[\w.+-]+@[\w-]+\.[A-Za-z]{2,})"
+PHONE_PATTERN = r"#PHONE"
 
 # A 0/1 flag has variance p(1-p), roughly p, where p is the share of rows that fire it.
 # 0.001 drops flags that fire on about 0.1% of rows or fewer (around 10 training rows).

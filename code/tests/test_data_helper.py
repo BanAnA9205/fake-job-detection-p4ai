@@ -20,15 +20,17 @@ from modules.data_helper import (
     audit,
     clean,
     load_raw,
+    load_processed,
     load_splits,
     make_splits,
+    save_processed,
     save_splits,
     seed_everything,
 )
 
 
 def make_frame(n_groups=20, per_group=10, pos_per_group=2):
-    """Small fake dataset: each description group has the same positive rate."""
+    """Small fake dataset: each group (own company, own description words) has the same positive rate."""
     rows = []
     job_id = 0
     for g in range(n_groups):
@@ -39,8 +41,8 @@ def make_frame(n_groups=20, per_group=10, pos_per_group=2):
                 "location": "US, NY" if i % 2 else "GB, London",
                 "department": None,
                 "salary_range": "50000-60000" if i % 3 else None,
-                "company_profile": "we hire people" if i else None,
-                "description": f"Group {g} builds software.",
+                "company_profile": f"company{g}x hires{g}x people{g}x" if i else None,
+                "description": f"team{g}x builds{g}x software{g}x.",
                 "requirements": "python",
                 "benefits": "none",
                 "telecommuting": i % 2,
@@ -139,15 +141,24 @@ def test_clean_drops_duplicates_and_hashes_groups():
     assert again["group"].tolist() == cleaned["group"].tolist()
 
 
-def test_clean_normalises_whitespace_and_case():
+def test_clean_groups_descriptions_that_differ_only_in_case_and_spacing():
     frame = make_frame(n_groups=2, per_group=5, pos_per_group=1)
-    frame.loc[0, "title"] = "First"
-    frame.loc[1, "title"] = "Second"
+    # Row 0 (group 0, no company) and row 5 (group 1, no company) get the same description.
     frame.loc[0, "description"] = "  Hello   World "
-    frame.loc[1, "description"] = "hello world"
+    frame.loc[5, "description"] = "hello world"
     out = clean(frame)
-    assert out.loc[0, "group"] == out.loc[1, "group"]
-    assert out.loc[2, "group"] != out.loc[0, "group"]
+    assert out.loc[0, "group"] == out.loc[5, "group"]
+
+
+def test_clean_fixes_text():
+    frame = make_frame(n_groups=1, per_group=3, pos_per_group=1)
+    frame.loc[0, "requirements"] = "#NAME?"
+    frame.loc[1, "description"] = "Mail #EMAIL_3a1e#PHONE_ad7b## today.We reply"
+    frame.loc[2, "description"] = "Corporate overviewAker builds rigs"
+    out = clean(frame)
+    assert pd.isna(out.loc[0, "requirements"])
+    assert out.loc[1, "description"] == "Mail #EMAIL#PHONE## today. We reply"
+    assert out.loc[2, "description"] == "Corporate overview Aker builds rigs"
 
 
 def test_clean_handles_missing_description():
@@ -202,6 +213,19 @@ def test_make_splits_rejects_unbalanced_data():
     frame["fraudulent"] = 0
     frame.loc[frame.index[:10], "fraudulent"] = 1  # every positive sits in one group
     expect_error(ValueError, lambda: make_splits(clean(frame)))
+
+
+def test_save_load_processed_roundtrip():
+    cleaned = clean(make_frame())
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "sub", "clean.csv.gz")
+        save_processed(cleaned, path)
+        back = load_processed(path)
+        # Same values (None and NaN both mean missing); an all-empty column comes back as text.
+        same = lambda d: d.astype(object).where(d.notna(), "<missing>").astype(str)
+        pd.testing.assert_frame_equal(same(back), same(cleaned))
+        assert back["department"].isna().all() and str(back["department"].dtype) == "str"
+        expect_error(AssertionError, lambda: load_processed(os.path.join(tmp, "missing.csv.gz")))
 
 
 def test_save_load_splits_roundtrip():

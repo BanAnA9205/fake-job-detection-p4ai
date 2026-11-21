@@ -64,12 +64,13 @@ NB1 = [
 # Fake job postings: EDA and preprocessing (notebook 01)
 
 We get to know the EMSCAD dataset before touching any model: class balance, missing
-data, duplicates, text lengths and simple spam-style flags. Every section feeds a
-decision: what to drop, how to split, and which metrics to trust. The second half builds
-the preprocessing that notebooks 02 (classical ML) and 03 (deep learning) share:
-cleaning, engineered features, the model matrix, and the five saved train/val/test splits.
+data, duplicates, text lengths and simple spam-style flags, followed by data quality checks on
+the text itself and on how related ads would be split. Every section feeds a decision: what to
+fix, what to drop, how to split, and which metrics to trust. The second half builds the
+preprocessing that notebooks 02 (classical ML) and 03 (deep learning) share: cleaning, engineered
+features, the model matrix, and the five saved train/val/test splits.
 
-Run time: about 1 minute.
+Run time: about 2 minutes.
 """),
     ("code", """
 import sys, os; os.chdir(os.path.join(os.getcwd(), "..")) if os.path.basename(os.getcwd()) == "notebooks" else None; sys.path.insert(0, "."); import warnings
@@ -81,6 +82,7 @@ import seaborn as sns
 
 from modules import data_helper as dh
 from modules import features as ft
+from modules import qc
 from modules.classical_runs import get_splits
 
 DATA = "../data/fake_job_postings.csv"
@@ -259,16 +261,213 @@ Same table for employment type, with missing as its own value.
 fraud_rate(feats["employment_type"].fillna("missing"), feats["fraudulent"])
 """),
     ("md", """
+## Fraud rate by the other categorical columns
+
+Experience, education, function and industry, with missing as its own value and only values seen
+on at least 100 ads.
+"""),
+    ("code", """
+for col in ["required_experience", "required_education", "function", "industry"]:
+    t = fraud_rate(feats[col].fillna("missing"), feats["fraudulent"])
+    print(f"{col}: highest and lowest fraud rates (overall {feats['fraudulent'].mean():.3f})")
+    print(pd.concat([t.head(4), t.tail(2)]).round(3).to_string(), "\\n")
+"""),
+    ("md", """
+## Text length of every field
+
+Median length in characters per class, and the share of ads where the field is empty.
+"""),
+    ("code", """
+rows = {}
+for col in dh.TEXT_COLS:
+    length = df[col].fillna("").str.len()
+    rows[col] = {"median real": length[df["fraudulent"] == 0].median(),
+                 "median fraud": length[df["fraudulent"] == 1].median(),
+                 "empty % real": round(100 * (length[df["fraudulent"] == 0] == 0).mean(), 1),
+                 "empty % fraud": round(100 * (length[df["fraudulent"] == 1] == 0).mean(), 1)}
+pd.DataFrame(rows).T
+"""),
+    ("md", """
+## Titles and words
+
+The most common titles among fraudulent ads, and the words whose presence differs most between
+the classes (log-odds of an ad containing the word, with add-one smoothing, words in at least 50
+ads). This is exploration on all ads; the models only ever learn from their training rows.
+"""),
+    ("code", """
+titles = df["title"].str.strip().str.lower()
+top = titles[df["fraudulent"] == 1].value_counts().head(8)
+print(pd.DataFrame({"fraud ads": top, "fraud rate": [df["fraudulent"][titles == t].mean().round(2) for t in top.index]}))
+
+from sklearn.feature_extraction.text import CountVectorizer
+cv = CountVectorizer(binary=True, min_df=50, stop_words="english")
+X = cv.fit_transform(feats["text"])
+y_all = feats["fraudulent"].to_numpy()
+in_fraud = (np.asarray(X[y_all == 1].sum(0)).ravel() + 1) / ((y_all == 1).sum() + 2)
+in_real = (np.asarray(X[y_all == 0].sum(0)).ravel() + 1) / ((y_all == 0).sum() + 2)
+log_odds = pd.Series(np.log(in_fraud / (1 - in_fraud)) - np.log(in_real / (1 - in_real)),
+                     index=cv.get_feature_names_out()).sort_values()
+print("\\nmost fraud-leaning words:", ", ".join(log_odds.tail(15).index[::-1]))
+print("most real-leaning words: ", ", ".join(log_odds.head(15).index))
+"""),
+    ("md", """
+Reading: on the raw text the strongest words are largely artefacts rather than scam language: a
+single company's name (Aker, also glued into "overviewaker"), hashed URLs that identify individual
+posters, and the "jobs in Asia, TEFL" template that alone accounts for hundreds of real ads. The
+data quality checks below address exactly these: hashed contacts, glued words, and companies or
+templates that would otherwise sit on both sides of a split.
+"""),
+    ("md", """
+## Data quality checks
+
+The sections above look at the columns. These checks look at the content and at how related
+ads would be split, using `modules/qc.py`.
+
+### Cells that look filled but are empty
+
+Excel errors such as `#NAME?` and filler such as `.` count as text unless we treat them as
+missing.
+"""),
+    ("code", """
+qc.disguised_missing(df, dh.TEXT_COLS + ["department"])
+"""),
+    ("md", """
+### Placeholders, glued text and very short ads
+
+The dataset replaced every link, email and phone number with a placeholder carrying its own hash
+(`#URL_3f9a...#`). A model can memorise one hash, i.e. one poster, instead of learning "has a
+phone number". Removed HTML also glued sentences together ("place.We").
+"""),
+    ("code", """
+raw_text = ft.add_engineered_features(df)["text"]
+y_raw = df["fraudulent"]
+print(qc.placeholder_counts(raw_text))
+glue = qc.glued_boundaries(raw_text)
+print(f"ads with glued boundaries: {(glue > 0).sum()} of {len(df)}")
+for limit in (100, 300):
+    short = raw_text.str.len() < limit
+    print(f"joined text under {limit} characters: {short.sum()} ads, fraud rate {y_raw[short].mean():.3f}")
+"""),
+    ("md", """
+Reading: the hashes repeat (more placeholders than distinct hashes), so the same poster's contact
+details appear in several ads; cleaning replaces each hash by a generic `#URL`, `#EMAIL` or
+`#PHONE`. Very short ads are mostly fraudulent, which the length features can pick up.
+
+### Companies and near-copies: would related ads end up on both sides of a split?
+
+Two ads can be related without sharing the exact description: the same company (identical
+company profile), or the same template with small edits (near-copies, TF-IDF cosine >= 0.9).
+"""),
+    ("code", """
+company = df["company_profile"].fillna("").str.lower().str.split().str.join(" ")
+has_company = company != ""
+print("companies with 2+ ads:", qc.group_purity(company[has_company], y_raw[has_company]))
+
+desc = df["description"].fillna("").str.lower().str.split().str.join(" ")
+near = qc.near_duplicate_clusters(desc)
+other_group = pd.Series(near).groupby(near).transform(lambda s: desc.iloc[s.index].nunique() > 1)
+print("ads in a near-copy cluster that spans several exact descriptions:", int(other_group.sum()))
+"""),
+    ("md", """
+Reading: companies are label-pure (no company has both real and fraudulent ads), so a company seen
+in training gives the label away in test. The check below splits the data the way this project
+first did, by exact description only, and counts the test ads whose company or near-copy is in the
+training rows.
+"""),
+    ("code", """
+# The first version's grouping: exact (normalised) description only.
+old = df.drop_duplicates(subset=[c for c in df.columns if c not in ("job_id", "fraudulent")]).reset_index(drop=True)
+old["group"] = old["description"].fillna("").str.lower().str.split().str.join(" ")
+old_splits = dh.make_splits(old, seed=SEED)
+keys = {"same company": old["company_profile"].fillna("").str.lower().str.split().str.join(" "),
+        "near-copy cluster": qc.near_duplicate_clusters(old["group"]).astype(str)}
+print(f"exact-description split, seed {SEED}: {len(old_splits['test'])} test ads, "
+      f"{int(old['fraudulent'].iloc[old_splits['test']].sum())} test frauds")
+qc.split_overlap(old_splits, keys, old["fraudulent"].to_numpy())
+"""),
+    ("md", """
+### Format, encoding and flag checks
+
+Columns the models use only indirectly still need checking: the salary (only "given or not" is
+used), location (the country is used), department (only "missing or not" is used), the text
+encoding, and whether the engineered flags fire when they should.
+"""),
+    ("code", """
+sal = df["salary_range"].dropna()
+valid = sal.str.fullmatch(r"\\d+-\\d+")
+print(f"salary: {len(sal)} given, {int(valid.sum())} as 'number-number', {int((~valid).sum())} other:",
+      sal[~valid].value_counts().head(5).to_dict())
+parts = df["location"].dropna().str.split(",").str.len()
+print("location: values per number of comma parts", parts.value_counts().sort_index().to_dict())
+dept = df["department"].dropna().str.strip()
+print(f"department: {dept.nunique()} levels, {dept.str.lower().nunique()} after lower-casing")
+text = feats["text"]
+print(f"encoding damage (Ã, â€, Â): {int(text.str.contains('Ã|â€|Â').sum())} ads | more than 5% non-ASCII: "
+      f"{int((text.str.count(r'[^\\x00-\\x7f]') / text.str.len().clip(lower=1) > 0.05).sum())} ads")
+for flag, direct in [("has_url", r"#URL|https?://|www\\."), ("has_phone", "#PHONE")]:
+    print(f"{flag}: flag and direct regex disagree on {int((feats[flag] != text.str.contains(direct).astype(int)).sum())} ads")
+words = text[feats["has_money_words"] == 1].str.extract("(" + ft.MONEY_PATTERN + ")", flags=2)[0].str.lower()
+print("money-word flag, what it matches:", words.value_counts().to_dict())
+"""),
+    ("md", """
+Reading: the salary column holds dates where Excel converted ranges such as "10-10" (only "salary
+given" is used, so this does not reach the models); department and location are messy but only
+their missingness and the country are used; the URL and phone flags agree with a direct match; and
+the money-word flag fires mostly on the dollar sign, so it is better read as "mentions an amount".
+"""),
+    ("md", """
+Reading: under exact-description grouping most test ads, and a large share of the test frauds,
+have their company or a near-copy in the training rows, so test scores would partly measure
+recognising known companies. The cleaning below therefore groups related ads, not only identical
+descriptions.
+
 ## Cleaning
 
-Session 5: clean first, then split, then fit. `clean` drops exact duplicates (ignoring
-`job_id`) and hashes each normalised description into a `group` id, so near-copies can
-be kept on one side of every split later.
+Session 5: clean first, then split, then fit. `clean` fixes the text (junk cells become missing,
+hashed placeholders become generic, glued sentences are separated), drops exact duplicates
+(ignoring `job_id`) and gives each ad a `group`: ads sharing an exact description, a company
+profile or a near-copy cluster belong to one group, and the relation chains. The splits keep each
+group on one side.
 """),
     ("code", """
 dfc = dh.clean(df)
 print("rows before cleaning:", len(df), "| after:", len(dfc))
-print("description groups:", dfc["group"].nunique())
+sizes = dfc["group"].value_counts()
+print(f"groups: {len(sizes)} | largest: {sizes.max()} ads | groups with 2+ ads:",
+      qc.group_purity(dfc["group"], dfc["fraudulent"]))
+qc.assert_clean(dfc, dh.TEXT_COLS)
+print("checked: no junk cells, hashed placeholders or duplicate ads left after cleaning")
+"""),
+    ("md", """
+### Groups with both labels
+
+A group mixes labels when related ads (same company or near-copies) are labelled differently,
+which can be a labelling error. They are listed for reading; their labels are kept as given.
+"""),
+    ("code", """
+g = dfc.groupby("group")["fraudulent"].agg(["size", "mean"])
+mixed = g[(g["mean"] > 0) & (g["mean"] < 1)]
+print(f"{len(mixed)} mixed groups, {int(mixed['size'].sum())} ads")
+for gid, row in mixed.sort_values("size").iterrows():
+    ads = dfc[dfc["group"] == gid]
+    print(f"- {int(row['size'])} ads, {int(ads['fraudulent'].sum())} fraud | e.g.",
+          "; ".join(ads.groupby("fraudulent")["title"].first().str.strip().str[:40]))
+"""),
+    ("md", """
+Reading: almost every group with 2+ ads is label-pure. The mixed ones are few, but one is large: a
+chain of related staffing-agency ads of which about half are labelled fraudulent. Keeping each
+group on one side of the split is what matters for evaluation, so the labels are kept as given.
+"""),
+    ("md", """
+### Save the processed data
+
+Every later notebook (and the GPU server) reads this file instead of cleaning the raw CSV again,
+so all of them use exactly the same rows, text and groups.
+"""),
+    ("code", """
+dh.save_processed(dfc)
+assert dh.load_processed().equals(dfc), "the saved file must read back identically"
+print("saved", dh.PROCESSED, f"({os.path.getsize(dh.PROCESSED) / 1e6:.1f} MB)")
 """),
     ("md", """
 ## Feature engineering
@@ -285,11 +484,12 @@ print(len(new_cols), "new columns:", ", ".join(new_cols))
 dfe[["title", "text"] + ft.NUMERIC_COLS[:3]].head(3)
 """),
     ("md", """
-## Splits: by description group, saved for all seeds
+## Splits: by group of related ads, saved for all seeds
 
-`make_splits` uses `StratifiedGroupKFold` on the group id (60/20/20, class ratio kept), so one
-description can never sit in two splits. Each seed's indices are saved to `splits/` with a
-fingerprint of the cleaned data; every notebook and every machine reloads exactly these rows.
+`make_splits` uses `StratifiedGroupKFold` on the group id (60/20/20, class ratio kept), so related
+ads can never sit in two splits. Each seed's indices are saved to `splits/` with a fingerprint of
+the cleaned data and its groups; every notebook and every machine reloads exactly these rows, and
+splits made under another grouping are refused.
 """),
     ("code", """
 y = dfe["fraudulent"].to_numpy()
@@ -316,7 +516,16 @@ for seed in SEEDS:
     for a_name, b_name in (("train", "val"), ("train", "test"), ("val", "test")):
         shared = groups[a_name] & groups[b_name]
         assert not shared, f"seed {seed}: {len(shared)} groups shared by {a_name} and {b_name}"
-print("checked: no description group appears in two splits, for every seed")
+print("checked: no group appears in two splits, for every seed")
+
+# The leak measured above under the old grouping, now on the saved splits: must be zero.
+norm = lambda s: s.fillna("").str.lower().str.split().str.join(" ")
+keys = {"same company": norm(dfe["company_profile"]),
+        "near-copy cluster": qc.near_duplicate_clusters(norm(dfe["description"])).astype(str)}
+for seed in SEEDS:
+    ov = qc.split_overlap(get_splits(dfe, seed), keys, y)
+    assert ov["test ads"].sum() == 0, f"seed {seed}: related ads cross from train to test: {ov.to_dict()}"
+print("checked: no test ad shares its company or near-copy cluster with a training ad, for every seed")
 """),
     ("md", """
 ## The model matrix (fitted on the training rows only)
@@ -351,10 +560,12 @@ print("flags dropped:", dropped or "none")
     ("md", """
 ## What the EDA tells us to do
 
+- Fix the text first: junk cells become missing, hashed contacts become generic placeholders,
+  glued sentences are separated.
 - Drop exact duplicates before splitting: a copy of the same ad on both sides of a
   split would leak evaluation rows.
-- Split by description group, not by row: near-identical ads must stay on one side
-  of the split.
+- Split by groups of related ads (same description, same company or near-copy), not by row:
+  companies are label-pure, so a company seen in training would give the label away in test.
 - The classes are heavily imbalanced: use PR-AUC as the headline metric, pick the
   decision threshold on validation, and never judge a model by accuracy alone.
 - Missingness is informative: keep the missing-indicator flags instead of imputing
@@ -424,7 +635,7 @@ first, then fit on the training rows only).
 """),
     ("code", """
 # Load, clean (drop duplicates), add features.
-df = ft.add_engineered_features(dh.clean(dh.load_raw(DATA)))
+df = ft.add_engineered_features(dh.load_processed())
 
 # Reuse the saved split, or create and save it the first time.
 if os.path.exists(SPLIT_PATH):
@@ -758,7 +969,7 @@ scores validation and test once. One JSON + NPZ pair per (model, seed) goes to
     ("code", """
 RUN_CLASSICAL = True  # False: only read the saved results below
 if RUN_CLASSICAL:
-    df_all = ft.add_engineered_features(dh.clean(dh.load_raw(DATA)))
+    df_all = ft.add_engineered_features(dh.load_processed())
     cr.run_classical(df_all, SEEDS, out_dir=OUT_CLASSICAL, n_iter=4, cv=3)
 """),
 ]
@@ -1022,7 +1233,7 @@ if not os.path.exists(SPLIT_PATH):
     print("splits/seed0.npz not found; cannot look up the missed ads.")
 else:
     # The seed-0 test rows, in the same order as the saved scores.
-    df = ft.add_engineered_features(dh.clean(dh.load_raw(DATA)))
+    df = ft.add_engineered_features(dh.load_processed())
     test = df.iloc[dh.load_splits(SPLIT_PATH, df)["test"]]
 
     # Ads flagged by at least one real model at its own threshold.
@@ -1098,7 +1309,7 @@ from modules import stacking
 A = (OUT_DEEP, "bert_distilbert-base-uncased")
 B = (OUT_CLASSICAL, "logreg")
 if all(rh.result_exists(*m, s) for m in (A, B) for s in range(5)):
-    df_stack = ft.add_engineered_features(dh.clean(dh.load_raw(DATA)))
+    df_stack = ft.add_engineered_features(dh.load_processed())
     stacking.run_stack(df_stack, range(5), A, B, out_dir=OUT_STACK)
 else:
     print("needs all 5 seeds of both runs; skipping the stack")
@@ -1152,7 +1363,7 @@ bert_name = next((n for n in seed_runs if n.startswith("bert_")), None)
 if bert_name is None or "logreg" not in seed_runs or not os.path.exists(SPLIT_PATH):
     print("needs seed-0 runs of DistilBERT and logreg, and splits/seed0.npz")
 else:
-    df = ft.add_engineered_features(dh.clean(dh.load_raw(DATA)))
+    df = ft.add_engineered_features(dh.load_processed())
     test = df.iloc[dh.load_splits(SPLIT_PATH, df)["test"]].reset_index(drop=True)
 
     # Hard predictions of both models at their own thresholds.
@@ -1181,8 +1392,9 @@ else:
 Computed on the server right after training seed 0 (notebook 03): for 10 test ads, Integrated
 Gradients measures how much each token moved the fraud probability compared with an all-[PAD]
 version of the same ad. Word pieces (`##...`) are merged back into words. Listed: the 8 words with
-the largest push towards fraud, after dropping stop words and punctuation (they get many small
-pushes that say nothing); `$` and numbers are kept because pay amounts are a known scam cue.
+the largest total push towards fraud (a word that occurs several times counts once, with its
+pushes added up), after dropping stop words and punctuation (they get many small pushes that say
+nothing); `$` and numbers are kept because pay amounts are a known scam cue.
 """),
     ("code", """
 from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
@@ -1206,9 +1418,14 @@ else:
                 words.append(t)
                 attrs.append(a)
         # Keep words with a letter or digit (and "$"), minus English stop words.
-        keep = [(a, w) for a, w in zip(attrs, words)
-                if (w == "$" or any(c.isalnum() for c in w)) and w not in ENGLISH_STOP_WORDS]
-        top = [w for a, w in sorted(keep, reverse=True)[:8] if a > 0]
+        # One entry per word: a word that occurs several times gets the sum of its attributions.
+        total = {}
+        for a, w in zip(attrs, words):
+            # Keep words (and "$"); drop punctuation, stop words and one-letter fragments.
+            if (w == "$" or (len(w) > 1 and any(c.isalnum() for c in w))) and w not in ENGLISH_STOP_WORDS:
+                total[w] = total.get(w, 0.0) + a
+        ranked = sorted(total.items(), key=lambda kv: kv[1], reverse=True)[:8]
+        top = [w for w, a in ranked if a > 0]
         # Check: the attributions add up to (score of the ad) - (score of the all-[PAD] baseline).
         print(f"[{r['kind']}] score {r['score']:.3f}, attributions sum {sum(attrs):+.2f}: " + ", ".join(top))
 """),
@@ -1348,7 +1565,7 @@ The same cleaned frame and the same saved splits as the classical notebook, so e
 is scored on identical rows.
 """),
     ("code", """
-df = ft.add_engineered_features(dh.clean(dh.load_raw(DATA)))
+df = ft.add_engineered_features(dh.load_processed())
 print("rows:", len(df), "| fraud:", int(df["fraudulent"].sum()))
 """),
     ("md", """

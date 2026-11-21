@@ -3,8 +3,8 @@
 
 \subsection{Main comparison}
 
-Table~\ref{tab:headline} gives the test metrics over the five splits and Figure~\ref{fig:seeds}
-each split separately. The stack is the best model at 0.867, TF-IDF logistic regression and
+Table~\ref{tab:headline} gives the test metrics over the five splits, and Figure~\ref{fig:seeds}
+shows each split separately. The stack is the best model at 0.867, TF-IDF logistic regression and
 DistilBERT are level at 0.821 and 0.816, and the one-class SVM reaches 0.176. Its ROC-AUC of 0.859
 looks close to the supervised models, which shows why PR-AUC is the main metric.
 
@@ -14,7 +14,7 @@ looks close to the supervised models, which shows why PR-AUC is the main metric.
 \setlength{\tabcolsep}{4pt}
 \begin{tabular}{lcccccr}
 \toprule
-\textbf{Model} & \textbf{PR-AUC} & \textbf{ROC-AUC} & \textbf{F1} & \textbf{Precision} & \textbf{Recall} & \textbf{s/seed} \\
+\textbf{Model} & \textbf{PR-AUC} & \textbf{ROC-AUC} & \textbf{F1} & \textbf{Precision} & \textbf{Recall} & \textbf{s/split} \\
 \midrule
 \tabinput{includes/tab_headline}
 \bottomrule
@@ -56,18 +56,19 @@ not close the gap.
 
 \subsection{One-class SVM}
 
-The fixed one-class SVM chose $\gamma = 30$ on every split, against 0.057 PR-AUC and a chance-level
-ROC-AUC of 0.47 for the first version. At its threshold it flags about one test ad in seven and
+The fixed one-class SVM chose $\gamma = 30$ on every split and reached a PR-AUC of 0.176, against
+0.057 and a chance-level ROC-AUC of 0.47 for the first version. At its threshold it flags about one test ad in seven and
 catches 56\% of the frauds, with a precision of 0.19, four times the base rate. Its training PR-AUC
-of about 1.0 is not leakage: the local kernel simply memorises the real training ads it was fitted
+of about 1.0 is not leakage: the local kernel memorises the real training ads it was fitted
 on. A supervised logistic regression on the same text and PCA features reaches a seed-0 validation
 PR-AUC of 0.662 against the one-class SVM's 0.164, so the features hold the signal and what the
 one-class SVM lacks is the labels.
 
 \subsection{Other models}
 
-BM25 logistic regression (0.847) beats TF-IDF logistic regression on all five splits and the MLP
-matches it (0.846) at seven times the training time, while Complement Naive Bayes reaches 0.773.
+BM25 logistic regression (0.847) beats TF-IDF logistic regression on all five splits. The MLP
+matches BM25 (0.846) but takes seven times as long to train as TF-IDF logistic regression, and
+Complement Naive Bayes reaches 0.773.
 Frozen MiniLM embeddings reach only 0.524, because a single summary vector loses the specific words
 that separate fraud. The zero-shot Qwen model scores 0.078, chance level: it calls 98\% of the ads
 fraudulent.
