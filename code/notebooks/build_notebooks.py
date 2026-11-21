@@ -153,8 +153,10 @@ ax.legend()
 plt.show()
 """),
     ("md", """
-Reading: in each pair the left bar is real ads and the right bar fraudulent ads;
-both use the same 0 to 1 scale.
+Reading: a missing company profile is the clearest difference (about two thirds of fraudulent ads
+against one in six real ones); employment type, required experience and required education are
+also missing more often in fraud. Missingness itself is a signal, so the features keep a
+missing-value flag per field instead of imputing the gaps away.
 """),
     ("md", """
 ## Duplicates and shared descriptions
@@ -185,35 +187,9 @@ ax.set_title("Description group sizes")
 plt.show()
 """),
     ("md", """
-Reading: the y axis is log-scaled, so each gridline up is a tenfold jump in the
-number of groups; bars on the right are descriptions repeated many times.
-"""),
-    ("md", """
-## Description length by class
-
-Long versus short ads. The x axis is log-scaled because lengths span several orders
-of magnitude.
-"""),
-    ("code", """
-# Description lengths (non-empty only) and log-spaced bins to match the log x axis.
-lens = df["description"].fillna("").str.len()
-lens = lens[lens > 0]
-bins = np.logspace(np.log10(lens.min()), np.log10(lens.max()), 40)
-
-# Overlaid density histograms, one per class.
-fig, ax = plt.subplots(figsize=(7, 4))
-ax.hist(lens[df["fraudulent"] == 0], bins=bins, alpha=0.5, density=True, label="real")
-ax.hist(lens[df["fraudulent"] == 1], bins=bins, alpha=0.5, density=True, label="fraud")
-ax.set_xscale("log")
-ax.set_xlabel("description length (characters, log scale)")
-ax.set_ylabel("share of ads (density)")
-ax.set_title("Description length by class")
-ax.legend()
-plt.show()
-"""),
-    ("md", """
-Reading: both histograms are densities, so the two classes are directly comparable
-despite their very different sizes.
+Reading: most descriptions are unique, but some are repeated tens or hundreds of times (the y
+axis is log-scaled). Exact duplicates are dropped, and ads sharing a description must stay on one
+side of every split, or a model is tested on copies of its training ads.
 """),
     ("md", """
 ## Engineered flags by class
@@ -233,8 +209,9 @@ flags = pd.DataFrame({
 flags.round(3)
 """),
     ("md", """
-Reading: each number is the share of ads in that class where the flag fires; 1.0
-means every ad of that class fires it.
+Reading: each number is the share of ads in the class where the flag fires. Fraudulent ads lack
+a company logo and profile far more often and mention money, email or phone more often; the flags
+that differ between the classes are the ones worth keeping as features.
 """),
     ("md", """
 ## Fraud rate by country
@@ -253,24 +230,21 @@ def fraud_rate(col, y, min_n=100):
 fraud_rate(feats["country"], feats["fraudulent"])
 """),
     ("md", """
-## Fraud rate by employment type
+## Fraud rate by the categorical columns
 
-Same table for employment type, with missing as its own value.
+Employment type, experience, education, function and industry, with missing as its own value and
+only values seen on at least 100 ads.
 """),
     ("code", """
-fraud_rate(feats["employment_type"].fillna("missing"), feats["fraudulent"])
-"""),
-    ("md", """
-## Fraud rate by the other categorical columns
-
-Experience, education, function and industry, with missing as its own value and only values seen
-on at least 100 ads.
-"""),
-    ("code", """
-for col in ["required_experience", "required_education", "function", "industry"]:
+for col in ["employment_type", "required_experience", "required_education", "function", "industry"]:
     t = fraud_rate(feats[col].fillna("missing"), feats["fraudulent"])
     print(f"{col}: highest and lowest fraud rates (overall {feats['fraudulent'].mean():.3f})")
     print(pd.concat([t.head(4), t.tail(2)]).round(3).to_string(), "\\n")
+"""),
+    ("md", """
+Reading: several values are far from the overall rate (for example oil and energy, accounting and
+administrative jobs well above it, part-time above full-time), so these columns enter the model as
+one-hot (employment type, function, industry) or ordered (experience, education) features.
 """),
     ("md", """
 ## Text length of every field
@@ -286,6 +260,12 @@ for col in dh.TEXT_COLS:
                  "empty % real": round(100 * (length[df["fraudulent"] == 0] == 0).mean(), 1),
                  "empty % fraud": round(100 * (length[df["fraudulent"] == 1] == 0).mean(), 1)}
 pd.DataFrame(rows).T
+"""),
+    ("md", """
+Reading: the company profile separates the classes most (empty in most fraudulent ads), and
+fraudulent descriptions and requirements are shorter; benefits look the same in both classes. All
+five fields are joined into one text column for the models, and the description and title lengths
+are kept as numeric features.
 """),
     ("md", """
 ## Titles and words
@@ -311,7 +291,9 @@ print("\\nmost fraud-leaning words:", ", ".join(log_odds.tail(15).index[::-1]))
 print("most real-leaning words: ", ", ".join(log_odds.head(15).index))
 """),
     ("md", """
-Reading: on the raw text the strongest words are largely artefacts rather than scam language: a
+Reading: the most common fraudulent titles are repeated templates (data entry, payroll clerk,
+cruise staff), each posted many times. On the raw text the strongest words are largely artefacts
+rather than scam language: a
 single company's name (Aker, also glued into "overviewaker"), hashed URLs that identify individual
 posters, and the "jobs in Asia, TEFL" template that alone accounts for hundreds of real ads. The
 data quality checks below address exactly these: hashed contacts, glued words, and companies or
@@ -332,7 +314,7 @@ missing.
 qc.disguised_missing(df, dh.TEXT_COLS + ["department"])
 """),
     ("md", """
-### Placeholders, glued text and very short ads
+### Placeholders and glued text
 
 The dataset replaced every link, email and phone number with a placeholder carrying its own hash
 (`#URL_3f9a...#`). A model can memorise one hash, i.e. one poster, instead of learning "has a
@@ -344,14 +326,11 @@ y_raw = df["fraudulent"]
 print(qc.placeholder_counts(raw_text))
 glue = qc.glued_boundaries(raw_text)
 print(f"ads with glued boundaries: {(glue > 0).sum()} of {len(df)}")
-for limit in (100, 300):
-    short = raw_text.str.len() < limit
-    print(f"joined text under {limit} characters: {short.sum()} ads, fraud rate {y_raw[short].mean():.3f}")
 """),
     ("md", """
 Reading: the hashes repeat (more placeholders than distinct hashes), so the same poster's contact
 details appear in several ads; cleaning replaces each hash by a generic `#URL`, `#EMAIL` or
-`#PHONE`. Very short ads are mostly fraudulent, which the length features can pick up.
+`#PHONE`, and glued sentences are separated.
 
 ### Companies and near-copies: would related ads end up on both sides of a split?
 
@@ -386,11 +365,11 @@ print(f"exact-description split, seed {SEED}: {len(old_splits['test'])} test ads
 qc.split_overlap(old_splits, keys, old["fraudulent"].to_numpy())
 """),
     ("md", """
-### Format, encoding and flag checks
+### Format and flag checks
 
 Columns the models use only indirectly still need checking: the salary (only "given or not" is
-used), location (the country is used), department (only "missing or not" is used), the text
-encoding, and whether the engineered flags fire when they should.
+used), location (the country is used), department (only "missing or not" is used), and whether the
+engineered flags fire when they should.
 """),
     ("code", """
 sal = df["salary_range"].dropna()
@@ -402,8 +381,6 @@ print("location: values per number of comma parts", parts.value_counts().sort_in
 dept = df["department"].dropna().str.strip()
 print(f"department: {dept.nunique()} levels, {dept.str.lower().nunique()} after lower-casing")
 text = feats["text"]
-print(f"encoding damage (Ã, â€, Â): {int(text.str.contains('Ã|â€|Â').sum())} ads | more than 5% non-ASCII: "
-      f"{int((text.str.count(r'[^\\x00-\\x7f]') / text.str.len().clip(lower=1) > 0.05).sum())} ads")
 for flag, direct in [("has_url", r"#URL|https?://|www\\."), ("has_phone", "#PHONE")]:
     print(f"{flag}: flag and direct regex disagree on {int((feats[flag] != text.str.contains(direct).astype(int)).sum())} ads")
 words = text[feats["has_money_words"] == 1].str.extract("(" + ft.MONEY_PATTERN + ")", flags=2)[0].str.lower()
@@ -548,32 +525,19 @@ print("train matrix:", X_train.shape, "| validation matrix:", X_val.shape)
 pd.Series([n.split("__")[0] for n in names]).value_counts().rename("columns per block").to_frame()
 """),
     ("md", """
-The binary-flag block passes through a `VarianceThreshold`: flags that are (almost)
-always 0 or always 1 on the training rows carry no information and are dropped.
-"""),
-    ("code", """
-kept = {n.split("__", 1)[1] for n in names if n.startswith("binary__")}
-dropped = [c for c in ft.BINARY_COLS if c not in kept]
-print("flags kept   :", sorted(kept))
-print("flags dropped:", dropped or "none")
-"""),
-    ("md", """
 ## What the EDA tells us to do
 
-- Fix the text first: junk cells become missing, hashed contacts become generic placeholders,
-  glued sentences are separated.
-- Drop exact duplicates before splitting: a copy of the same ad on both sides of a
-  split would leak evaluation rows.
-- Split by groups of related ads (same description, same company or near-copy), not by row:
-  companies are label-pure, so a company seen in training would give the label away in test.
-- The classes are heavily imbalanced: use PR-AUC as the headline metric, pick the
-  decision threshold on validation, and never judge a model by accuracy alone.
-- Missingness is informative: keep the missing-indicator flags instead of imputing
-  them away.
-- The text fields carry the strongest signal: keep the joined text central to the
-  feature set and read model errors from it.
-- Fit every transformer on the training rows only; the saved splits make that the same
-  for every model, notebook and machine.
+| Finding | Decision |
+|---|---|
+| 4.8% of ads are fraudulent | PR-AUC as the main metric, threshold chosen on validation, class weights |
+| Exact duplicates and repeated descriptions | Drop duplicates; keep each description on one side of a split |
+| Companies are label-pure; templates recur with small edits | Group ads by description, company and near-copy before splitting |
+| Missing fields, logo, money and contact cues differ by class | Missing-value flags and spam-cue flags as features |
+| Categorical values with very different fraud rates | One-hot and ordered metadata features |
+| Some countries have no fraud at all | Keep country, but read it as a collection artefact |
+| Junk cells, hashed contacts, glued sentences | Clean the text before any model sees it |
+| Salary values corrupted by Excel; messy department and location | Use only "salary given", the country code and "department missing" |
+| Every model must see the same rows | Save the processed data and the splits; fit transformers on training rows only |
 """),
 ]
 
