@@ -1,0 +1,46 @@
+\section{Method}
+\label{method}
+
+\subsection{Evaluation protocol}
+
+Every model is fitted on the training rows, makes all its choices (hyper-parameters, epochs,
+threshold) on the validation rows, and is scored once on the test rows, on each of the five
+splits. Hyper-parameters are tuned by PR-AUC with 3-fold grouped cross-validation inside the
+training rows. The main metric is PR-AUC, which measures how well frauds are ranked above real ads
+and whose floor is the fraud rate (0.049); ROC-AUC is also reported, but it counts the plentiful
+true negatives and flatters weak models~\cite{saito2015}. Precision, recall and F1 are measured at
+the threshold that maximises F1 on validation. A majority dummy, which calls every ad real, fixes
+the floor.
+
+\subsection{Models}
+
+\textbf{TF-IDF logistic regression} gives every feature its own weight, trains in about a minute
+and can be read through its coefficients. Class weights make a missed fraud cost about 20 false
+alarms, and the regularisation strength, vocabulary size and n-gram range are tuned.
+
+\textbf{The one-class SVM}~\cite{scholkopf2001} is fitted on the real training ads only and scores
+an ad by how far it lies outside their region, so it never sees a fraud. Our first version got two
+choices wrong. It read the full feature matrix, in which the four numeric columns make up 45\% of
+each row's length against under 5\% for the text, so its RBF kernel mostly compared ad lengths;
+and it left the kernel width $\gamma$ at its default. The final version reads the TF-IDF text
+only, reduced to 100 dimensions with PCA and scaled to unit length. A cross-validation map on the
+seed-0 training rows showed that $\gamma$ decides almost everything: a broad kernel
+($\gamma \le 1$) ranks frauds as \emph{more} typical than real ads (ROC-AUC 0.23 to 0.30), the
+score peaks around $\gamma = 30$, and $\nu$ barely matters. The search therefore covers the whole
+grid $\gamma \in \{3, 10, 30, 100, 300\}$, $\nu \in \{0.05, 0.2\}$.
+
+\textbf{DistilBERT}~\cite{sanh2019}, a compact version of BERT~\cite{devlin2019}, reads the first 256
+tokens of each ad in context and is fine-tuned on the training rows with AdamW (learning rate
+$2 \cdot 10^{-5}$, batch size 128, up to 5 epochs), softened class weights, and the weights of the
+best validation epoch kept. It runs on a GPU server.
+
+\textbf{The stack}~\cite{wolpert1992} is a logistic regression whose only two inputs are the logits
+of DistilBERT's and TF-IDF logistic regression's saved scores. It is fitted on the validation rows,
+because both models are over-confident on their own training rows, and its threshold comes from
+grouped out-of-fold predictions inside the validation rows.
+
+\textbf{Other models} were run through the same protocol for comparison and are reported briefly:
+BM25 logistic regression~\cite{robertson2009}, an MLP, Complement Naive Bayes~\cite{rennie2003},
+frozen MiniLM sentence embeddings~\cite{reimers2019,wang2020minilm} with logistic regression, and
+a zero-shot Qwen2.5-1.5B language model~\cite{qwen2024} asked whether each ad is fraudulent. The
+classical models use scikit-learn~\cite{pedregosa2011}.

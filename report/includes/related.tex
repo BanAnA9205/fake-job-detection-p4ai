@@ -1,51 +1,22 @@
 \section{Related work}
 \label{related}
 
-\subsection{The dataset and classical approaches}
+Vidros et al.~\cite{vidros2017} introduced EMSCAD and classified it with bag-of-words features and
+standard classifiers, on a balanced subset of the data. Most later studies combine text features
+with meta-features such as a missing company profile and use linear, tree or ensemble classifiers;
+Taneja et al.~\cite{taneja2025} list ten of them with 91\% to 99.9\% accuracy, including one measured
+on a resampled test set~\cite{amaar2022}. Transformers have since been applied to the same data:
+Akram et al.~\cite{akram2024} fine-tune BERT~\cite{devlin2019} and RoBERTa with SMOTE oversampling,
+and Fraud-BERT~\cite{taneja2025} reports F1 0.93 against 0.78 for logistic regression, on one 80:20
+split without deduplication or seeds.
 
-Vidros et al.~\cite{vidros2017} defined online recruitment fraud as a research
-problem, released EMSCAD and classified it with bag-of-words features and standard classifiers.
-They worked on a balanced subset, so their results do not show how the models behave at the
-natural 4.84\% fraud rate. Later studies mostly stay in the same family: text features plus
-hand-built meta-features such as a missing company profile or a missing logo, fed to linear,
-tree or ensemble classifiers. Taneja et al.~\cite{taneja2025} tabulate ten EMSCAD
-studies from 2017 to 2024 whose best models are random forests, rule learners, extra trees or SVMs,
-with 91\% to 99.9\% accuracy. The top of that range needs care: Amaar et
-al.~\cite{amaar2022} report 99.9\% accuracy on a resampled test set, which does not
-reflect the real class balance.
+Two further results shape our protocol. Oversampling such as SMOTE~\cite{chawla2002} is
+legitimate during training but makes test numbers meaningless when applied to the test set, and
+precision-recall curves are more informative than ROC curves when negatives
+dominate~\cite{saito2015}. For explaining a neural model, Integrated
+Gradients~\cite{sundararajan2017} attributes a prediction to the input tokens, with the guarantee
+that the attributions add up to the change in output from a neutral reference input.
 
-\subsection{Transformer approaches}
-
-Pretrained transformers such as BERT~\cite{devlin2019} have since been applied to
-the same data. Akram et al.~\cite{akram2024} fine-tune BERT and RoBERTa with ten
-SMOTE variants and report about 90\% balanced accuracy and recall. Fraud-BERT~\cite{taneja2025}
-fine-tunes BERT-base on twelve concatenated text columns and reports F1 0.93 on one 80:20 split,
-against 0.89 for an SVM and 0.78 for logistic regression on the same split. The paper reports no
-seeds, no validation split and no deduplication, although its authors note that EMSCAD contains
-duplicate entries, so it is unclear how much of the gap would survive a stricter protocol. A
-cheaper alternative to fine-tuning is to reuse a frozen sentence encoder such as
-Sentence-BERT~\cite{reimers2019} and train only a small classifier on its embeddings.
-
-\subsection{Evaluation on imbalanced data}
-
-Two lines of work shape how results on such data should be measured. Oversampling methods such
-as SMOTE~\cite{chawla2002} rebalance the training data with synthetic minority
-examples, which is legitimate during training but makes test numbers meaningless when applied to
-the test set. Saito and Rehmsmeier~\cite{saito2015} show that ROC curves look
-optimistic when negatives dominate and that precision-recall curves are more informative, because
-they ignore the large number of easy true negatives.
-
-\subsection{Explaining neural text classifiers}
-
-A linear model can be read from its coefficients, but a transformer cannot. Integrated
-Gradients~\cite{sundararajan2017} explains a single prediction of a neural network by following
-the model's gradients from a neutral reference input to the actual input. It has a useful
-guarantee, completeness: the attributions of an input add up exactly to the change in the model's
-output between the reference and that input.
-
-\subsection{Research gap}
-
-Taken together, reported EMSCAD results are hard to compare because their protocols differ,
-single-split results carry no estimate of their spread, and the gain of a fine-tuned transformer
-over a tuned word-count baseline is rarely isolated. This project therefore fixes one protocol,
-puts every model through it on the same five splits, and asks what each model relies on.
+Taken together, EMSCAD results are hard to compare, rarely report their spread over splits, and
+rarely isolate what a fine-tuned transformer adds over a tuned word-count baseline. This project
+fixes one protocol and puts every model through it.

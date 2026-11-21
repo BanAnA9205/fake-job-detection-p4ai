@@ -18,7 +18,6 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from sklearn.metrics import precision_recall_curve
 
 from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
 
@@ -26,7 +25,7 @@ from modules import data_helper as dh, explain_helper as eh, features as ft, mod
 from modules import results_helper as rh
 
 OUT = os.path.join(HERE, "img")
-BLUE, ORANGE, AQUA, YELLOW = "#2a78d6", "#eb6834", "#1baf7a", "#eda100"
+BLUE, ORANGE, AQUA = "#2a78d6", "#eb6834", "#1baf7a"
 GRAY, INK, MUTED = "#8a8985", "#0b0b0b", "#52514e"
 
 plt.rcParams.update({
@@ -46,6 +45,7 @@ NAMES = {
 }
 SHORT = {"stack_bert_logreg": "Stack", "logreg_bm25": "BM25 LR", "logreg": "TF-IDF LR",
          "bert_distilbert-base-uncased": "DistilBERT", "mlp": "MLP", "cnb": "Compl. NB"}
+MAIN = ["stack_bert_logreg", "logreg", "bert_distilbert-base-uncased", "ocsvm", "dummy_majority"]
 FAMILY = {"logreg_bm25": "classical", "mlp": "classical", "logreg": "classical", "cnb": "classical",
           "bert_distilbert-base-uncased": "deep", "emb_logreg": "deep",
           "zeroshot_Qwen2.5-1.5B-Instruct": "no labels", "ocsvm": "no labels",
@@ -81,7 +81,7 @@ def fig_flags():
 def fig_seeds(res):
     """Test PR-AUC of every model on every seed; the bar marks the mean."""
     order = res.groupby("model")["test_pr_auc"].mean().sort_values().index
-    fig, ax = plt.subplots(figsize=(5.6, 3.4))
+    fig, ax = plt.subplots(figsize=(5.6, 0.32 * len(order) + 0.9))
     for i, m in enumerate(order):
         v = res.loc[res["model"] == m, "test_pr_auc"].to_numpy()
         c = FAMILY_COLOR[FAMILY[m]]
@@ -97,47 +97,8 @@ def fig_seeds(res):
     ax.grid(axis="y", visible=False)
     for fam, c in FAMILY_COLOR.items():
         ax.scatter([], [], s=22, color=c, label=fam)
-    ax.legend(loc="lower right", title=None)
+    ax.legend(loc="center", bbox_to_anchor=(0.38, 0.5), title=None)  # the empty middle of the axis
     save(fig, "test_pr_auc_seeds.pdf")
-
-
-def fig_pr_curves(res):
-    """Seed-0 precision-recall curves on the test split for four representative models."""
-    picks = [("logreg", "classical", BLUE, "-"),
-             ("bert_distilbert-base-uncased", "deep", ORANGE, "--"),
-             ("stack_bert_logreg", "stack", AQUA, "-"),
-             ("ocsvm", "classical", YELLOW, ":")]
-    fig, ax = plt.subplots(figsize=(4.6, 3.4))
-    for m, group, c, ls in picks:
-        s = rh.load_scores(f"outputs/{group}", m, 0)
-        p, r, _ = precision_recall_curve(s["y_test"], s["score_test"])
-        ax.plot(r, p, color=c, linestyle=ls, linewidth=2, label=NAMES[m])
-    rate = s["y_test"].mean()
-    ax.axhline(rate, color=GRAY, linestyle="--", linewidth=1)
-    ax.text(0.99, rate + 0.02, f"fraud rate {rate:.3f}", color=MUTED, fontsize=8, ha="right")
-    ax.set_xlim(0, 1); ax.set_ylim(0, 1.02)
-    ax.set_xlabel("recall"); ax.set_ylabel("precision")
-    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.18), ncol=2)
-    save(fig, "pr_curves_seed0.pdf")
-
-
-def fig_bert_epochs():
-    """Validation PR-AUC per epoch of the fine-tuned DistilBERT, one thin line per seed."""
-    rows = []
-    for seed in range(5):
-        with open(f"outputs/deep/bert_distilbert-base-uncased_seed{seed}.json") as f:
-            rows += [{"seed": seed, **h} for h in json.load(f)["history"]]
-    h = pd.DataFrame(rows)
-    fig, ax = plt.subplots(figsize=(4.0, 2.6))
-    for _, g in h.groupby("seed"):
-        ax.plot(g["epoch"], g["val_pr_auc"], color=ORANGE, alpha=0.45, linewidth=1, marker="o",
-                markersize=3)
-    mean = h.groupby("epoch")["val_pr_auc"].mean()
-    ax.plot(mean.index, mean.values, color=ORANGE, linewidth=2.2)
-    ax.text(mean.index[-1] + 0.1, mean.values[-1], "mean", va="center", color=INK, fontsize=8)
-    ax.set_xticks(mean.index)
-    ax.set_xlabel("epoch"); ax.set_ylabel("validation PR-AUC")
-    save(fig, "bert_epochs.pdf")
 
 
 def write_tables(res):
@@ -155,8 +116,7 @@ def write_tables(res):
 
     t = res.pivot(index="seed", columns="model", values="test_pr_auc")
     pairs = [("stack_bert_logreg", "logreg"), ("stack_bert_logreg", "bert_distilbert-base-uncased"),
-             ("bert_distilbert-base-uncased", "logreg"), ("logreg_bm25", "logreg"),
-             ("mlp", "logreg"), ("cnb", "logreg")]
+             ("bert_distilbert-base-uncased", "logreg")]
     lines = []
     for a, b in pairs:
         d = t[a] - t[b]
@@ -228,10 +188,11 @@ def write_ig_table(k=5):
 
 if __name__ == "__main__":
     res = rh.load_results("outputs/classical", "outputs/deep", "outputs/stack")
+    # The report's tables and the per-seed figure show only the models the report is about;
+    # the other models are reported in the text.
+    res = res[res["model"].isin(MAIN)]
     fig_flags()
     fig_seeds(res)
-    fig_pr_curves(res)
-    fig_bert_epochs()
     write_tables(res)
     write_ig_table()
     write_term_table()

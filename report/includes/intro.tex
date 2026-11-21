@@ -1,65 +1,26 @@
 \section{Introduction}
 \label{intro}
 
-\subsection{Motivation}
-
 Online recruitment fraud is the posting of fake job advertisements, usually to collect money or
-personal data from the people who answer them~\cite{vidros2017}. For a job board,
-every fake ad that stays online harms an applicant and erodes the trust of the real employers
-that pay for the service. Moderators cannot read every incoming ad, so the practical need is a
-model that \emph{ranks} new ads by how likely they are to be fake, so that the moderators' limited
-time goes to the top of that list.
+personal data from applicants~\cite{vidros2017}. A job board cannot have every ad read by a
+moderator, so it needs a model that ranks incoming ads by how likely they are to be fake. We study
+this task on EMSCAD~\cite{vidros2017}, 17,880 job ads labelled real or fraudulent by hand. Two
+properties of the data make it harder than it looks: only 4.84\% of the ads are fraudulent, so a
+model that calls every ad real already reaches 95.2\% accuracy, and many ads share their text, so a
+random split puts copies of the same ad in both training and test rows. Published results range
+from 91\% to 99.9\% accuracy, but under different splits, metrics and resampling schemes, and
+usually on a single split~\cite{taneja2025,amaar2022}.
 
-\subsection{Problem statement}
+We therefore compare models under one protocol that does not leak and that measures the spread
+over several splits. The study centres on three models that see the problem differently: logistic
+regression on TF-IDF features, the standard text baseline; a one-class SVM, which learns only what
+real ads look like and needs no fraud labels; and a fine-tuned DistilBERT transformer. Since
+DistilBERT and logistic regression make different mistakes, we also combine them by stacking.
+The stack is the best model (test PR-AUC 0.867), while logistic regression (0.821) and DistilBERT
+(0.816) are level and the one-class SVM reaches 0.176, above the 0.049 floor.
 
-We study this task on EMSCAD, the Employment Scam Aegean Dataset~\cite{vidros2017},
-which contains 17,880 job ads labelled real or fraudulent by hand. The task is binary text
-classification, but two properties of the data make it harder than it looks. First, only 866 ads
-(4.84\%) are fraudulent: a model that calls every ad real already reaches 95.2\% accuracy while
-catching nothing. Second, many ads are copies or near-copies of each other, so a careless random
-split puts the same text in both the training and the test rows and rewards memorisation.
-
-These two properties also explain why published EMSCAD results are hard to compare. They range
-from 91\% to 99.9\% accuracy, but they use different splits, metrics and resampling schemes, and
-at least one was measured on a resampled test set~\cite{taneja2025,amaar2022}.
-Most report a single split, which says nothing about how much a score would move on another one.
-
-\subsection{Objectives and approach}
-
-The project asks one question: \emph{under a single protocol that does not leak, how do classical
-text models, pretrained transformers and label-free detectors compare on EMSCAD, and what do they
-rely on?} To answer it, we first explore the data and let each finding fix a design decision
-(Section~\ref{data}). These decisions become one evaluation protocol shared by every model:
-duplicate-aware grouped splits, five split seeds, PR-AUC as the main metric, a threshold chosen on
-validation and a test split scored only once (Section~\ref{protocol}). Within this protocol we
-compare three approaches in depth (Section~\ref{models}): logistic regression on TF-IDF features,
-the standard text baseline; a one-class SVM, which learns only what real ads look like and so needs
-no fraud labels; and a fine-tuned DistilBERT transformer. Because DistilBERT and logistic
-regression turn out to make different mistakes, we combine them by stacking, and we close by
-examining what the models rely on (Sections~\ref{results} and~\ref{explain}). A few other models
-were tried along the way and are reported briefly for comparison.
-
-\subsection{Summary of findings}
-
-TF-IDF logistic regression reaches a test PR-AUC of 0.821 over five seeds, and a fine-tuned
-DistilBERT does not beat it (0.816). The two make different mistakes, and a stack of the two
-reaches 0.867, better than either on every seed and the best result of the project. The one-class
-SVM, trained without fraud labels, reaches 0.176: well above the 0.049 floor, but far below the
-supervised models, once its kernel is set to compare each ad with its nearest real neighbours.
-The explanations show that part of what the models learn is a property of how EMSCAD was collected
-rather than of fraud itself.
-
-\subsection{Report structure}
-
-Section~\ref{related} reviews earlier work. Section~\ref{data} explores the data and derives the
-design decisions, which Section~\ref{protocol} turns into a preprocessing pipeline and an
-evaluation protocol. Section~\ref{models} presents the models and why each is included,
-Section~\ref{results} the results, and Section~\ref{explain} what the models rely on and where they
-fail. Section~\ref{discussion} interprets the results and lists the limitations, and
-Section~\ref{conclusion} concludes.
-
-\textbf{Code.} Four notebooks run the project in order: \texttt{01} EDA and preprocessing,
-\texttt{02} classical models, \texttt{03} deep models (GPU server only) and \texttt{04} analysis.
-Shared logic lives in \texttt{code/modules/} and is covered by unit tests. Every number in this
-report is read from the result files the notebooks save; \texttt{report/make\_figures.py} builds
-the figures and tables from them.
+Section~\ref{related} reviews earlier work, Section~\ref{data} explores and prepares the data,
+Section~\ref{method} describes the protocol and the models, and Sections~\ref{results}
+to~\ref{conclusion} present, explain and discuss the results. The code is organised as four
+notebooks (EDA, classical models, deep models, analysis) on top of tested modules in
+\texttt{code/modules/}; every number in this report is read from the results they save.

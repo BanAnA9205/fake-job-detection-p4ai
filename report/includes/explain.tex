@@ -1,16 +1,14 @@
 \section{Explaining the models}
 \label{explain}
 
-The results say how well the models rank ads, but not what they rely on. This section looks at
-the linear model as a whole, at DistilBERT on individual ads, and finally at the frauds that the
-models disagree on or all miss.
+\subsection{Logistic regression}
 
-\subsection{What the linear model relies on}
-
-Because logistic regression gives each feature one weight, its largest coefficients show what it
-relies on across all ads. Table~\ref{tab:terms} lists the ten largest on each side for TF-IDF LR,
-refitted on the seed-0 training rows with its tuned settings ($C = 10$, 30,000 terms, 1- and
-2-grams).
+The largest coefficients of TF-IDF logistic regression (Table~\ref{tab:terms}, seed 0) mix two
+kinds of evidence. Money words (\emph{money}, \emph{income}, \emph{000}) push towards fraud, as the
+exploration suggested, but so does the wording of a few repeated posters: \emph{apply using} occurs
+in 41 ads, 35 of them fraudulent, and the employer name \emph{accion} in 26 ads, 16 of them
+fraudulent. On the real side, the countries Greece and the Philippines appear among the strongest
+features, confirming that the model has partly learned how EMSCAD was collected.
 
 \begin{table}[tb]
 \centering
@@ -23,42 +21,20 @@ refitted on the seed-0 training rows with its tuned settings ($C = 10$, 30,000 t
 \tabinput{includes/tab_terms}
 \bottomrule
 \end{tabular}
-\caption{Largest coefficients of TF-IDF LR (seed 0). Plain entries are text terms; ``industry'' and
-``country'' entries are one-hot metadata columns.}
+\caption{Largest coefficients of TF-IDF logistic regression (seed 0).}
 \label{tab:terms}
 \end{table}
 
-The fraud side mixes two kinds of evidence. The first is general scam language: \emph{money},
-\emph{income} and \emph{000} (from amounts such as 50,000), in line with the money-word flag of
-Section~\ref{data}. The second is the wording of a few repeated posters. The phrase \emph{apply
-using} (from ``apply using the link'') appears in 41 ads, 35 of them fraudulent, and \emph{accion}
-is an employer name found in 26 ads, 16 of them fraudulent. The grouped split keeps ads with the
-same description together, but one poster's different descriptions (41 groups for \emph{apply
-using}) still reach both sides of the split, so the model can learn the poster rather than the
-pattern.
+\subsection{DistilBERT}
 
-The real side shows signs of an established employer: words such as \emph{growing} and
-\emph{companies}, specific industries (insurance, internet, restaurants), and the countries Greece
-and the Philippines. The two country entries are the collection artefact anticipated in
-Section~\ref{data}: the model has learned where EMSCAD's real ads came from.
-
-\subsection{What DistilBERT relies on}
-
-DistilBERT has no coefficients, so we explain individual predictions with Integrated
-Gradients~\cite{sundararajan2017}, computed with Captum~\cite{kokhlikyan2020}. For one ad, it
-measures how much each token moved the fraud probability compared with a reference version of the
-same ad in which every token is replaced by \texttt{[PAD]} (except \texttt{[CLS]} and
-\texttt{[SEP]}), using 50 integration steps. We chose it because it uses the model's own
-gradients and has a built-in check: the attributions of an ad must add up to its score change from
-the reference.
-
-The fine-tuned weights are not saved, so the explanation runs right after training seed 0, on ten
-test ads: the four highest-scored frauds, the three lowest-scored frauds and the three
-highest-scored real ads. Table~\ref{tab:ig} lists the words with the largest push towards fraud
-for each, after merging word pieces and dropping stop words and punctuation (\$ and numbers are
-kept). The check holds: the attributions add up to $+0.50$ to $+0.53$ for the flagged ads and to
-$-0.48$ for the missed ones, which is the change from the reference score of about 0.5 to the
-ad's own score.
+For DistilBERT we used Integrated Gradients~\cite{sundararajan2017} (Captum~\cite{kokhlikyan2020}) on
+ten seed-0 test ads, with an all-\texttt{[PAD]} version of each ad as the reference
+(Table~\ref{tab:ig}). The attributions of each ad add up to its score change from the reference
+(about $\pm 0.5$), as the method guarantees. The clearest scams are pushed by pay amounts and money
+words, the same cues the linear model uses. The most confident false alarms are real part-time,
+data-entry and payroll ads that quote a pay rate, and the missed frauds read like ordinary job
+descriptions. One caught fraud is pushed by the hash EMSCAD put in place of a URL: DistilBERT, like
+the linear model, has partly memorised posters.
 
 \begin{table}[tb]
 \centering
@@ -71,44 +47,16 @@ ad's own score.
 \tabinput{includes/tab_ig}
 \bottomrule
 \end{tabular}
-\caption{Integrated Gradients for DistilBERT (seed 0). Score is the fraud probability and Sum the
-sum of all token attributions. A word can be listed twice when it occurs twice in the ad.}
+\caption{Integrated Gradients for DistilBERT (seed 0): fraud probability, sum of attributions and
+the words with the largest push towards fraud.}
 \label{tab:ig}
 \end{table}
 
-The two clearest scams, part-time and weekend cash jobs, are pushed by pay amounts and money words
-(\$, 500, 400, 450, \emph{earn}): the same cues that the linear model and the money-word flag rely
-on. The three real ads that DistilBERT is most sure about are part-time, data-entry and
-payroll-clerk ads that quote a pay rate (\$20/hr). They share these surface features with the
-scams, so a model that reads only the text cannot separate them. The three missed frauds
-(\emph{DATA ENTRY}, \emph{Front-End Developer} and \emph{Hotel Workers Needed}) read like ordinary
-job descriptions, and their attributions sum to $-0.48$, so the text as a whole pushes towards
-real. Finally, one caught fraud is pushed by a token like \texttt{ddb08035...}, the hash that
-EMSCAD put in place of a real URL. A hash identifies one specific link, so here DistilBERT has
-partly memorised a poster, just as the linear model did with \emph{accion}.
+\subsection{Where the models differ}
 
-\subsection{Where the models disagree}
-
-The stack of Section~\ref{results} works only because DistilBERT and logistic regression make
-different mistakes. At their own thresholds on the 171 seed-0 test frauds, DistilBERT and TF-IDF
-logistic regression both catch 109, only DistilBERT catches 12, only logistic regression catches
-15, and 35 get past both. The Spearman correlation between their test scores is only 0.39, so two
-models with almost the same PR-AUC rank the ads quite differently. DistilBERT also raises more
-false alarms at its threshold (28 against 19).
-
-The one-class SVM adds a third view. It is far less precise, but it catches 24 seed-0 test frauds
-that TF-IDF logistic regression misses, and 16 that no supervised model catches at all. These are
-ads unlike any real ad in the data, even though their wording carries no learned fraud cue: all
-three copies of one call-centre ad, a run of hotel vacancies (several of them in London, one at a
-named international hotel chain), a vacancy that names a real oil and gas company, and a few
-customer-service and accounting roles.
-
-\subsection{Frauds that no model catches}
-
-Even with the one-class SVM included, 11 of the 171 seed-0 test frauds escape every model at its
-own threshold, and they are remarkably uniform. All eleven are IT and engineering roles (technical
-lead, business analyst, SAP engineer, integration engineer, process engineer and similar), four of
-them in one shared ``Hiring for ... Position: ... Job Type: Full Time'' layout. None of them
-contains a money word, against 43\% of all seed-0 test frauds, and they read like the many real IT
-postings in the data, so they are neither suspicious in their wording nor unusual as ads. Catching
-them would need information from outside the ad, such as the poster's account history.
+On the 171 seed-0 test frauds, DistilBERT and logistic regression both catch 109, only DistilBERT
+catches 12 and only logistic regression 15, and their scores have a Spearman correlation of just
+0.39: this disagreement is what the stack exploits. The one-class SVM sees the data differently
+again: it is the only model that catches 16 of the test frauds, mostly hotel and call-centre
+vacancies. Only 11 frauds escape every model, all of them IT and engineering postings without a
+single money word, which read like the many real IT ads in the data.

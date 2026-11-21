@@ -1,16 +1,12 @@
 \section{Results}
 \label{results}
 
-This section first gives the overall picture and explains why models have to be compared split by
-split. It then follows the three main models and the stack in turn, and closes with the models
-that were tried along the way.
+\subsection{Main comparison}
 
-\subsection{Overall comparison}
-
-Table~\ref{tab:headline} gives the test metrics of every model as the mean and standard deviation
-over the five split seeds, and Figure~\ref{fig:seeds} shows each seed separately. PR-AUC and
-ROC-AUC measure the ranking and need no threshold. F1, precision and recall are measured at each
-model's own validation-chosen threshold, so they depend on that choice as well as on the model.
+Table~\ref{tab:headline} gives the test metrics over the five splits and Figure~\ref{fig:seeds}
+each split separately. The stack is the best model at 0.867, TF-IDF logistic regression and
+DistilBERT are level at 0.821 and 0.816, and the one-class SVM reaches 0.176. Its ROC-AUC of 0.859
+looks close to the supervised models, which shows why PR-AUC is the main metric.
 
 \begin{table}[tb]
 \centering
@@ -23,36 +19,26 @@ model's own validation-chosen threshold, so they depend on that choice as well a
 \tabinput{includes/tab_headline}
 \bottomrule
 \end{tabular}
-\caption{Test metrics over five split seeds (mean $\pm$ standard deviation), sorted by PR-AUC. The
-last column is the wall-clock time per seed, tuning included (classical models on a laptop CPU,
-deep models on a GPU). The zero-shot time is for scoring all 17,599 ads once; the stack takes
-under a second.}
+\caption{Test metrics over five splits (mean $\pm$ standard deviation). The last column is the
+time per split; DistilBERT ran on a GPU, the other models on a laptop CPU.}
 \label{tab:headline}
 \end{table}
 
 \begin{figure}[tb]
 \centering
-\includegraphics[width=0.85\linewidth]{test_pr_auc_seeds.pdf}
-\caption{Test PR-AUC of every model on every split seed. Dots are seeds, the black bar is the
-mean and the dashed line is the fraud rate.}
+\includegraphics[width=0.75\linewidth]{test_pr_auc_seeds.pdf}
+\caption{Test PR-AUC per split. Dots are splits, the bar is the mean, the dashed line the fraud rate.}
 \label{fig:seeds}
 \end{figure}
 
-The supervised text models form one group between 0.77 and 0.87, with the stack on top, followed
-by BM25 and TF-IDF logistic regression, the MLP, DistilBERT and Complement Naive Bayes. The one-class SVM, which never
-learns from a fraud label, reaches 0.176: three to four times the 0.049 floor, but far below the
-supervised group. Its ROC-AUC of 0.859 looks close to the supervised models, which shows why
-PR-AUC is the main metric: ROC-AUC is dominated by the thousands of real ads that any reasonable
-model ranks low, while PR-AUC asks how clean the top of the ranking is.
-
-\subsection{Comparing models across splits}
-
-Within the supervised group, the standard deviations (0.03 to 0.08) are as large as most of the
-gaps between the means, and in Figure~\ref{fig:seeds} the dots of these models overlap. Read this
-way, they cannot be told apart. However, every model is evaluated on the same five splits, and a
-split that is hard for one model is hard for all of them. Comparing two models seed by seed
-cancels this shared difficulty, so Table~\ref{tab:paired} gives the per-seed differences against
-TF-IDF logistic regression, the reference model, and between the stack and its two inputs.
+The standard deviations of the supervised models (about 0.07) are larger than the gaps between
+them, but every model faces the same five splits, and a hard split is hard for all of them.
+Comparing models split by split cancels this shared difficulty (Table~\ref{tab:paired}).
+DistilBERT and logistic regression are then still level, with DistilBERT winning on one split of
+five, while the stack beats both on every split, by 0.047 and 0.052 on average. Per standard
+deviation of its inputs, the stacker weights logistic regression two to five times more than
+DistilBERT. DistilBERT's validation PR-AUC flattens after its third epoch, so more training would
+not close the gap.
 
 \begin{table}[tb]
 \centering
@@ -64,79 +50,24 @@ TF-IDF logistic regression, the reference model, and between the stack and its t
 \tabinput{includes/tab_paired}
 \bottomrule
 \end{tabular}
-\caption{Paired differences in test PR-AUC per split seed.}
+\caption{Paired differences in test PR-AUC per split.}
 \label{tab:paired}
 \end{table}
 
-\subsection{TF-IDF logistic regression and DistilBERT}
-
-TF-IDF logistic regression reaches 0.821, and fine-tuned DistilBERT 0.816. Paired by seed, neither
-is better: DistilBERT wins on one seed of five and the mean difference is $-0.005$. DistilBERT
-needs a GPU and about five times the training time to reach the same score as a model that trains
-in a minute on a laptop.
-
-DistilBERT's training curves (Figure~\ref{fig:curves}, right) show that more training would not
-change this. Validation PR-AUC jumps from about 0.6 after the first epoch to about 0.8 after the
-second and is flat from the third epoch on, with the best epoch at 3, 4 or 5 depending on the
-seed. The chosen thresholds vary from 0.25 to 0.94 across seeds, because the fine-tuned model
-pushes most scores close to 0 or 1, so a small shift in the scores moves the threshold a lot.
-
-\begin{figure}[tb]
-\centering
-\begin{minipage}{0.52\linewidth}
-\centering
-\includegraphics[width=\linewidth]{pr_curves_seed0.pdf}
-\end{minipage}\hfill
-\begin{minipage}{0.45\linewidth}
-\centering
-\includegraphics[width=\linewidth]{bert_epochs.pdf}
-\end{minipage}
-\caption{Left: test precision-recall curves of seed 0. Right: DistilBERT validation PR-AUC per
-epoch, one thin line per seed and the mean as a thick line.}
-\label{fig:curves}
-\end{figure}
-
-\subsection{Stacking}
-
-Two models with the same score are worth combining only if they make different mistakes, and
-Section~\ref{explain} shows that these two do. The stack reaches 0.867, the best result of the
-project. It beats TF-IDF logistic regression on all five seeds (+0.030 to +0.090, mean +0.047) and
-DistilBERT on all five (mean +0.052), and its precision of 0.880 is the highest of any model. In the
-precision-recall curves (Figure~\ref{fig:curves}, left) the stack lies on or above both of its
-inputs over most of the recall range. Measured per standard deviation of its input, logistic
-regression's weight in the stacker is 2 to 5 times DistilBERT's on every seed, so the stack is
-mostly logistic regression, corrected by DistilBERT where the two disagree.
-
 \subsection{One-class SVM}
 
-With text-only input and a local kernel, the one-class SVM chose $\gamma = 30$ on every seed and
-reached a test PR-AUC of $0.176 \pm 0.014$ and a ROC-AUC of 0.859. Its first version, which read the
-full feature matrix with the default kernel width, scored 0.057 with a ROC-AUC of 0.47, no better
-than chance. At its threshold the fixed version flags 404 to 625 of the 3,520 test ads and catches
-about 56\% of the frauds, with a precision of 0.19: one flagged ad in five is a fraud, against one
-in twenty for a random pick.
-
-Its training score needs care. Its training PR-AUC is about 1.0, because with such a local kernel
-the real training ads it was fitted on look perfectly normal, while the training frauds, which it
-never saw, look unusual. This is memorisation of the training rows rather than leakage, and the
-test rows were never seen, but it means the training score says nothing for this model.
-
-The remaining gap to the supervised models is not a lack of information in the input. A supervised
-logistic regression on exactly the same text and PCA features reaches a seed-0 validation PR-AUC of
-0.662, against 0.164 for the one-class SVM. The features contain the signal; what the one-class
-SVM lacks is the fraud labels. It does, however, catch frauds that the supervised models miss
-(Section~\ref{explain}).
+The fixed one-class SVM chose $\gamma = 30$ on every split, against 0.057 PR-AUC and a chance-level
+ROC-AUC of 0.47 for the first version. At its threshold it flags about one test ad in seven and
+catches 56\% of the frauds, with a precision of 0.19, four times the base rate. Its training PR-AUC
+of about 1.0 is not leakage: the local kernel simply memorises the real training ads it was fitted
+on. A supervised logistic regression on the same text and PCA features reaches a seed-0 validation
+PR-AUC of 0.662 against the one-class SVM's 0.164, so the features hold the signal and what the
+one-class SVM lacks is the labels.
 
 \subsection{Other models}
 
-The other models confirm the choices above. BM25 logistic regression beats TF-IDF logistic
-regression on all five seeds (mean +0.026), so the word weighting helps a little but
-consistently; it is the best single model at 0.847. The MLP matches it (0.846) at about seven times
-the training time of TF-IDF logistic regression. Complement Naive Bayes reaches 0.773 and loses to
-TF-IDF logistic regression on four seeds of five, although it has the smallest spread of any
-supervised model. The frozen MiniLM embeddings reach only 0.524: a single 384-dimensional summary of
-what an ad means loses the specific words, such as pay amounts or ``data entry'', that separate
-fraud in this dataset, and fine-tuning the whole encoder recovers them. Finally, the zero-shot
-Qwen2.5-1.5B model scores 0.078 with a ROC-AUC of 0.49, which is chance level: it answers
-``fraudulent'' for 98\% of the seed-0 test ads, so a general language model asked a general
-question does not know what fraud in EMSCAD looks like.
+BM25 logistic regression (0.847) beats TF-IDF logistic regression on all five splits and the MLP
+matches it (0.846) at seven times the training time, while Complement Naive Bayes reaches 0.773.
+Frozen MiniLM embeddings reach only 0.524, because a single summary vector loses the specific words
+that separate fraud. The zero-shot Qwen model scores 0.078, chance level: it calls 98\% of the ads
+fraudulent.
