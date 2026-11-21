@@ -1,0 +1,35 @@
+{
+  "model": "zeroshot_Qwen2.5-1.5B-Instruct",
+  "group": "deep",
+  "seed": 1,
+  "thr": 0.8933094143867493,
+  "val": {
+    "precision": 0.06515580736543909,
+    "recall": 0.40350877192982454,
+    "f1": 0.11219512195121951,
+    "tp": 69,
+    "fp": 990,
+    "fn": 102,
+    "tn": 2359,
+    "pr_auc": 0.06501260333718045,
+    "roc_auc": 0.500113501630058
+  },
+  "test": {
+    "precision": 0.06454816285998013,
+    "recall": 0.38011695906432746,
+    "f1": 0.11035653650254669,
+    "tp": 65,
+    "fp": 942,
+    "fn": 106,
+    "tn": 2407,
+    "pr_auc": 0.07689812003397406,
+    "roc_auc": 0.5252148236621214
+  },
+  "train_pr_auc": 0.11692123211152838,
+  "best_params": {
+    "model_name": "Qwen/Qwen2.5-1.5B-Instruct",
+    "max_tokens": 512
+  },
+  "seconds": 1546.7375869750977,
+  "notes": "zero-shot Yes/No prompt, no training; threshold on validation"
+}
