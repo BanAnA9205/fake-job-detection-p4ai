@@ -9,20 +9,23 @@
 \graphicspath{{img/}}
 \pagestyle{fancy}
 \renewcommand{\headrulewidth}{0.4pt}
+\setlength{\headheight}{30pt}
 \renewcommand{\footrulewidth}{0.4pt}
 
 \lhead{
-    \small HCMUT -- CO3135 P4AI-DS
+    \begin{tabular}{@{}c@{\hspace{1.2em}}l@{}}
+    \raisebox{-0.45\height}{\includegraphics[height=0.9cm]{logo_alt.png}} &
+    \begin{tabular}{@{}l@{}}\small University of Technology, Ho Chi Minh City \\
+    \small Faculty of Computer Science and Engineering\end{tabular}
+    \end{tabular}
 }
 
-\rhead{
-    \small Fake job posting detection
-}
+\rhead{}
 
 \cfoot{}
 
 \lfoot{
-    \small Group 7
+    \small P4AI-DS -- Group 7 -- Academic year 2026--2027
 }
 
 \rfoot{\small page \thepage\ of \begin{NoHyper}\pageref{LastPage}\end{NoHyper}}
