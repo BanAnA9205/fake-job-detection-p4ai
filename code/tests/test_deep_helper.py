@@ -19,7 +19,7 @@ HEAVY = {"torch", "transformers", "sentence_transformers"}
 
 sys.path.insert(0, str(ROOT))
 
-from modules.deep_helper import embed_texts
+from modules.deep_helper import embed_texts, text_fingerprint
 
 
 def test_module_compiles():
@@ -57,6 +57,8 @@ def test_embed_texts_cache_hit():
         emb = np.arange(6, dtype=np.float32).reshape(3, 2)
         np.save(os.path.join(tmp, "tiny_model_emb.npy"), emb)
         np.save(os.path.join(tmp, "tiny_model_ids.npy"), np.array([5, 6, 7]))
+        with open(os.path.join(tmp, "tiny_model_text.txt"), "w") as f:
+            f.write(text_fingerprint(["a", "b", "c"]))
         out = embed_texts(["a", "b", "c"], np.array([5, 6, 7]),
                           model_name="tiny_model", cache_dir=tmp)
         assert np.array_equal(out, emb), "cache hit must return the stored matrix"

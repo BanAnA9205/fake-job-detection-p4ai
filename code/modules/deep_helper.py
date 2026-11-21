@@ -5,9 +5,15 @@ the heavy import happens inside embed_texts. The module therefore compiles and
 imports on any laptop.
 """
 
+import hashlib
 import os
 
 import numpy as np
+
+
+def text_fingerprint(texts):
+    """Short hash of the texts in order: a cache built from other text must not be reused."""
+    return hashlib.sha256("\x1f".join(map(str, texts)).encode("utf-8")).hexdigest()[:16]
 
 
 def embed_texts(
@@ -19,10 +25,10 @@ def embed_texts(
     cache_dir="features",
     device="cpu",
 ) -> np.ndarray:
-    """Return normalised sentence embeddings for texts, reusing a cache when the ids match.
+    """Return normalised sentence embeddings for texts, reusing a cache when ids and texts match.
 
-    Embeddings are computed once per model and saved with their row ids, so a
-    rerun after an unchanged split can skip the expensive encoding step.
+    Embeddings are computed once per model and saved with their row ids and a fingerprint of the
+    texts, so a rerun skips the expensive encoding unless the rows or their text changed.
     """
     texts = list(texts)
     ids = np.asarray(ids)
@@ -33,12 +39,15 @@ def embed_texts(
     slug = model_name.replace("/", "_")
     emb_path = os.path.join(cache_dir, slug + "_emb.npy")
     ids_path = os.path.join(cache_dir, slug + "_ids.npy")
+    text_path = os.path.join(cache_dir, slug + "_text.txt")
+    fingerprint = text_fingerprint(texts)
 
-    # Reuse the cache when it was built for exactly these rows.
-    if os.path.exists(emb_path) and os.path.exists(ids_path):
-        cached_ids = np.load(ids_path, allow_pickle=True)
-        if np.array_equal(cached_ids, ids):
-            return np.load(emb_path)
+    # Reuse the cache when it was built for exactly these rows and texts.
+    if all(os.path.exists(p) for p in (emb_path, ids_path, text_path)):
+        same_ids = np.array_equal(np.load(ids_path, allow_pickle=True), ids)
+        with open(text_path) as f:
+            if same_ids and f.read().strip() == fingerprint:
+                return np.load(emb_path)
 
     # Cache miss: load the encoder (imported here so laptops without it can still import this module).
     from sentence_transformers import SentenceTransformer
@@ -59,6 +68,8 @@ def embed_texts(
     # Save the vectors together with their row ids for the next run.
     np.save(emb_path, emb)
     np.save(ids_path, ids)
+    with open(text_path, "w") as f:
+        f.write(fingerprint)
     return emb
 
 

@@ -968,9 +968,10 @@ scores validation and test once. One JSON + NPZ pair per (model, seed) goes to
 """),
     ("code", """
 RUN_CLASSICAL = True  # False: only read the saved results below
+N_JOBS = 1            # parallel CV fits per search; up to 4 on the server
 if RUN_CLASSICAL:
     df_all = ft.add_engineered_features(dh.load_processed())
-    cr.run_classical(df_all, SEEDS, out_dir=OUT_CLASSICAL, n_iter=4, cv=3)
+    cr.run_classical(df_all, SEEDS, out_dir=OUT_CLASSICAL, n_iter=4, cv=3, n_jobs=N_JOBS)
 """),
 ]
 

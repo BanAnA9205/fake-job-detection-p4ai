@@ -39,20 +39,24 @@ def print_splits(splits, y, seed):
               f"rate={y[idx].mean():.4f}")
 
 
-def load_embeddings(embed_model, job_ids, cache_dir=EMBED_CACHE):
-    """Load the cached embeddings for these rows; never imports sentence-transformers."""
+def load_embeddings(embed_model, job_ids, texts, cache_dir=EMBED_CACHE):
+    """Load the cached embeddings for these rows and texts; never imports sentence-transformers."""
     slug = embed_model.replace("/", "_")
     emb_path = os.path.join(cache_dir, slug + "_emb.npy")
     ids_path = os.path.join(cache_dir, slug + "_ids.npy")
+    text_path = os.path.join(cache_dir, slug + "_text.txt")
 
     # The cache must exist...
-    if not (os.path.exists(emb_path) and os.path.exists(ids_path)):
+    if not all(os.path.exists(p) for p in (emb_path, ids_path, text_path)):
         raise FileNotFoundError(f"no embeddings for {embed_model} in {cache_dir}/; run the embedding step first")
 
-    # ...and must have been built for exactly these rows, in this order.
+    # ...and must have been built for exactly these rows, in this order, from this text.
     assert np.array_equal(np.load(ids_path, allow_pickle=True), np.asarray(job_ids)), (
         "cached embeddings belong to different rows; rerun the embedding step"
     )
+    with open(text_path) as f:
+        assert f.read().strip() == deep_helper.text_fingerprint(texts), (
+            "cached embeddings were built from different text; rerun the embedding step")
     return np.load(emb_path)
 
 
@@ -113,7 +117,7 @@ def save_head_result(out_dir, name, seed, model, params, X, y, splits, start):
 def run_heads(df, seeds, out_dir, embed_model=EMBED_MODEL):
     """Fit the logistic-regression head on cached embeddings (CPU only, no torch import)."""
     y = df[dh.TARGET].to_numpy()
-    emb = load_embeddings(embed_model, df["job_id"].to_numpy())
+    emb = load_embeddings(embed_model, df["job_id"].to_numpy(), df["text"].tolist())
     print(f"embeddings: {emb.shape}")
     for seed in seeds:
         # The saved split for this seed.
@@ -233,10 +237,12 @@ def run_zero_shot(df, seeds, out_dir, device, llm_model=LLM_MODEL, batch_size=16
     name = "zeroshot_" + llm_model.split("/")[-1]
     cache = os.path.join(EMBED_CACHE, name + "_scores.npz")
 
-    # Nothing is trained, so the scores do not depend on the split: compute them once.
-    if os.path.exists(cache):
-        z = np.load(cache)
-        assert np.array_equal(z["ids"], df["job_id"].to_numpy()), "cached scores belong to other rows"
+    # Nothing is trained, so the scores do not depend on the split: compute them once, and reuse
+    # them only when they were computed for exactly these rows and this text.
+    fingerprint = deep_helper.text_fingerprint(df["text"])
+    z = np.load(cache) if os.path.exists(cache) else None
+    if (z is not None and "text" in z.files and str(z["text"]) == fingerprint
+            and np.array_equal(z["ids"], df["job_id"].to_numpy())):
         scores, seconds = z["scores"], float(z["seconds"])
     else:
         start = time.time()
@@ -244,7 +250,7 @@ def run_zero_shot(df, seeds, out_dir, device, llm_model=LLM_MODEL, batch_size=16
                                               batch_size=batch_size, max_tokens=max_tokens)
         seconds = time.time() - start
         os.makedirs(EMBED_CACHE, exist_ok=True)
-        np.savez(cache, ids=df["job_id"].to_numpy(), scores=scores, seconds=seconds)
+        np.savez(cache, ids=df["job_id"].to_numpy(), text=fingerprint, scores=scores, seconds=seconds)
 
     # Per seed: threshold on validation, test scored once, same files as every other model.
     for seed in seeds:

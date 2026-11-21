@@ -46,7 +46,7 @@ def test_stack_beats_both_inputs_when_they_know_different_rows():
 
 def test_run_stack_on_the_real_split_with_fake_runs():
     """End to end on the saved seed-0 split: files written, test scored, resume skips."""
-    df = ft.add_engineered_features(dh.clean(dh.load_raw("../data/fake_job_postings.csv")))
+    df = ft.add_engineered_features(dh.load_processed())
     sp = dh.load_splits("splits/seed0.npz", df)
     y = df["fraudulent"].to_numpy()
     rng = np.random.default_rng(1)

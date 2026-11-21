@@ -31,7 +31,7 @@ def test_heads_on_random_embeddings():
 
 
 def test_classical_run_with_dummy_only_and_resume():
-    df = ft.add_engineered_features(dh.clean(dh.load_raw("../data/fake_job_postings.csv")))
+    df = ft.add_engineered_features(dh.load_processed())
     out = tempfile.mkdtemp()
     classical_runs.run_classical(df, [0], out_dir=out, models=["dummy_majority"])
     assert rh.result_exists(out, "dummy_majority", 0)
@@ -44,7 +44,7 @@ def test_classical_run_with_dummy_only_and_resume():
 
 def test_zero_shot_run_with_fake_scorer():
     """Scores are computed once, cached, and evaluated per seed; a fake scorer replaces the LLM."""
-    df = ft.add_engineered_features(dh.clean(dh.load_raw("../data/fake_job_postings.csv")))
+    df = ft.add_engineered_features(dh.load_processed())
     y = df["fraudulent"].to_numpy()
     calls = []
 
@@ -59,12 +59,31 @@ def test_zero_shot_run_with_fake_scorer():
         out = tempfile.mkdtemp()
         deep_runs.run_zero_shot(df, [0, 1], out, device="cpu", llm_model="org/fake-llm")
         deep_runs.run_zero_shot(df, [0, 1], tempfile.mkdtemp(), device="cpu", llm_model="org/fake-llm")
+        assert calls == [len(df)], "the LLM must score every ad exactly once (second run uses the cache)"
+        # Same rows, different text: the cache must not be reused.
+        changed = df.assign(text=df["text"] + " edited")
+        deep_runs.run_zero_shot(changed, [0], tempfile.mkdtemp(), device="cpu", llm_model="org/fake-llm")
+        assert calls == [len(df), len(df)], "changed text must be scored again"
     finally:
         deep_runs.deep_helper.zero_shot_scores, deep_runs.EMBED_CACHE = real, real_cache
-    assert calls == [len(df)], "the LLM must score every ad exactly once (second run uses the cache)"
     res = rh.load_results(out)
     assert sorted(res["seed"]) == [0, 1] and set(res["model"]) == {"zeroshot_fake-llm"}
     assert (res["test_pr_auc"] > 0.5).all()  # the fake scores separate the classes well
+
+
+def test_load_embeddings_rejects_other_text():
+    """A cache built from other text (same rows) must be refused, not silently reused."""
+    cache = tempfile.mkdtemp()
+    np.save(os.path.join(cache, "m_emb.npy"), np.zeros((2, 3), dtype=np.float32))
+    np.save(os.path.join(cache, "m_ids.npy"), np.array([1, 2]))
+    with open(os.path.join(cache, "m_text.txt"), "w") as f:
+        f.write(deep_runs.deep_helper.text_fingerprint(["old a", "old b"]))
+    assert deep_runs.load_embeddings("m", [1, 2], ["old a", "old b"], cache).shape == (2, 3)
+    try:
+        deep_runs.load_embeddings("m", [1, 2], ["new a", "new b"], cache)
+    except AssertionError:
+        return
+    raise AssertionError("embeddings built from other text were reused")
 
 
 def test_explain_bert_picks_the_right_ads():
@@ -94,5 +113,6 @@ if __name__ == "__main__":
     test_heads_on_random_embeddings()
     test_classical_run_with_dummy_only_and_resume()
     test_zero_shot_run_with_fake_scorer()
+    test_load_embeddings_rejects_other_text()
     test_explain_bert_picks_the_right_ads()
     print("all run tests passed")
