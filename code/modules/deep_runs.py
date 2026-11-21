@@ -187,7 +187,7 @@ def run_bert(df, seeds, out_dir, device, bert_model=BERT_MODEL, epochs=3, batch_
         # here, before the results are saved (a crash here then reruns this seed instead of skipping it).
         if seed == explain_seed:
             explain_bert(df.iloc[te], y[te], score_test, thr, model, tokenizer, device, max_len,
-                         os.path.join(out_dir, f"{name}_explain_seed{seed}.json"))
+                         os.path.join(out_dir, "explain", f"{name}_seed{seed}.json"))
 
         # Save the shared json + npz pair (with the per-epoch history) and report.
         rh.save_result(
@@ -221,6 +221,7 @@ def explain_bert(test_df, y_test, score_test, thr, model, tokenizer, device, max
                      "label": int(y_test[i]), "score": float(score_test[i]),
                      "flagged": bool(score_test[i] >= thr),
                      "tokens": tokens, "attributions": attr.tolist()})
+    os.makedirs(os.path.dirname(path), exist_ok=True)  # own folder: result globs must not see it
     with open(path, "w") as f:
         json.dump(rows, f)
     print(f"explanations for {len(rows)} test ads saved to {path}")

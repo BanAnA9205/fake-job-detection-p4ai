@@ -970,12 +970,12 @@ not by all.
 """),
     ("code", """
 # Which test frauds each model catches at its own threshold.
-SKIP_CATCH = ("dummy_majority", "ocsvm")
+SKIP_CATCH = ("dummy_majority", "ocsvm", "zeroshot_")
 fraud_idx = np.where(y_test == 1)[0]
-# Left out: the dummy flags nothing, and the one-class SVM flags about half of all ads,
-# so it "catches" frauds by flagging everything near them.
+# Left out (by name prefix): the dummy flags nothing, and the one-class SVM and the zero-shot
+# LLM rank ads at chance level, so the frauds they "catch" are luck, not signal.
 caught = {name: frozenset(fraud_idx[s["score_test"][fraud_idx] >= thr])
-          for name, (s, thr) in seed_runs.items() if name not in SKIP_CATCH}
+          for name, (s, thr) in seed_runs.items() if not name.startswith(SKIP_CATCH)}
 
 # Pairwise matrix: frauds caught by the row model but missed by the column model.
 names = list(caught)
@@ -1015,7 +1015,7 @@ else:
     # Ads flagged by at least one real model at its own threshold.
     caught_any = np.zeros(len(test), dtype=bool)
     for name, (s, thr) in seed_runs.items():
-        if name not in SKIP_CATCH:            # see the cell above for why these two are left out
+        if not name.startswith(SKIP_CATCH):   # see the cell above for why these are left out
             caught_any |= (s["score_test"] >= thr)
 
     # The frauds nobody caught, printed for reading.
@@ -1143,10 +1143,13 @@ else:
 Computed on the server right after training seed 0 (notebook 03): for 10 test ads, Integrated
 Gradients measures how much each token moved the fraud probability compared with an all-[PAD]
 version of the same ad. Word pieces (`##...`) are merged back into words. Listed: the 8 words with
-the largest push towards fraud.
+the largest push towards fraud, after dropping stop words and punctuation (they get many small
+pushes that say nothing); `$` and numbers are kept because pay amounts are a known scam cue.
 """),
     ("code", """
-paths = sorted(glob.glob(os.path.join(OUT_DEEP, "bert_*_explain_seed0.json")))
+from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
+
+paths = sorted(glob.glob(os.path.join(OUT_DEEP, "explain", "bert_*_seed0.json")))
 if not paths:
     print("no explanation file yet; it is written by the DistilBERT run of notebook 03")
 else:
@@ -1164,8 +1167,12 @@ else:
             else:
                 words.append(t)
                 attrs.append(a)
-        top = [w for a, w in sorted(zip(attrs, words), reverse=True)[:8] if a > 0]
-        print(f"[{r['kind']}] score {r['score']:.3f}: " + ", ".join(top))
+        # Keep words with a letter or digit (and "$"), minus English stop words.
+        keep = [(a, w) for a, w in zip(attrs, words)
+                if (w == "$" or any(c.isalnum() for c in w)) and w not in ENGLISH_STOP_WORDS]
+        top = [w for a, w in sorted(keep, reverse=True)[:8] if a > 0]
+        # Check: the attributions add up to (score of the ad) - (score of the all-[PAD] baseline).
+        print(f"[{r['kind']}] score {r['score']:.3f}, attributions sum {sum(attrs):+.2f}: " + ", ".join(top))
 """),
     ("md", """
 Reading: a word listed for a missed fraud still pushed towards fraud, just not enough to cross
@@ -1195,9 +1202,34 @@ Numbers are test PR-AUC, means over the 5 split seeds in the first table.
     ("md", """
 ## Findings (deep models)
 
-Pending: DistilBERT is being rerun on the GPU server (its classification head is now seeded, so
-the five seeds are reproducible) together with the new zero-shot language model. The findings are
-written from those results once they are back.
+Numbers are test PR-AUC, means over the 5 split seeds (seed 0 for the error analysis).
+
+- Fine-tuned DistilBERT reaches 0.816 (std 0.072; seeds 0.80, 0.79, 0.72, 0.89, 0.89). It is below
+  BM25 logistic regression on all 5 seeds (mean gap -0.032) and level with TF-IDF logistic regression
+  (mean gap -0.005, sign changes across seeds), at about 280 s per seed on a GPU against about
+  60 to 80 s per seed on a CPU for the logistic regressions. On 17.6k ads, a pretrained language
+  model does not beat word counts.
+- Validation PR-AUC rises fast up to epoch 3 and is flat after it (best epoch 3, 4 or 5 depending
+  on the seed); the weights of the best validation epoch are kept. The chosen thresholds range from
+  0.25 to 0.94 across seeds: the fine-tuned model pushes scores to 0 or 1, so the cut-off is fragile.
+- DistilBERT and TF-IDF logistic regression make different mistakes (seed 0, 171 test frauds):
+  both catch 109, only DistilBERT 12, only logistic regression 15, neither 35. Their test scores
+  have a Spearman correlation of only 0.39.
+- Frozen sentence embeddings with a logistic-regression head reach 0.524: well above the dummy but
+  far below TF-IDF. A 384-dimensional summary of the meaning of an ad loses the specific words
+  (pay amounts, "data entry") that separate fraud here.
+- The zero-shot language model (Qwen2.5-1.5B-Instruct, no training) scores 0.078, ROC-AUC 0.49:
+  chance level. It answers "fraudulent" to 98% of the test ads (seed 0), and in bf16 its scores take
+  only 47 distinct values over 3,520 ads. The fraud in EMSCAD is specific to this data set and only
+  some of it looks like an obvious scam, so a general model without labels cannot find it; the labels
+  are what makes the supervised models work.
+- Integrated Gradients (part 2 above; each ad's attributions add up to its score change of about
+  plus or minus 0.5 from the all-[PAD] baseline, as the method requires): the two clearest caught scams are
+  pushed by pay amounts and money words ("$", "500", "400", "earn", "extra", "fees"). The false alarms
+  are real ads with the same cues (part-time, data entry, payroll clerk at "$20"/hour). The missed
+  frauds read like ordinary job descriptions, so no word pushes them towards fraud. One caught fraud
+  is pushed by a hashed URL token that the data set inserted, a sign that collection artefacts can
+  leak into the model.
 """),
 ]
 
