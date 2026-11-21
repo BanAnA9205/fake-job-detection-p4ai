@@ -11,3 +11,15 @@ code/features/
 *.pt
 *.pth
 logs/
+report/*.aux
+report/*.log
+report/*.bbl
+report/*.bcf
+report/*.blg
+report/*.fls
+report/*.fdb_latexmk
+report/*.out
+report/*.run.xml
+report/*.toc
+report/main.pdf
+report/*SAVE-ERROR

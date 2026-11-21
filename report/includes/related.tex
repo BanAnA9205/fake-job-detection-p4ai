@@ -1,0 +1,35 @@
+\section{Related work}
+\label{related}
+
+\textbf{Dataset and first baselines.} Vidros et al.\textsuperscript{\cite{vidros2017}} defined online
+recruitment fraud as a research problem, released EMSCAD, and classified it with bag-of-words
+features and standard classifiers. They worked on a balanced subset, so their numbers do not show
+how the models behave at the natural 4.84\% fraud rate.
+
+\textbf{Classical models.} Later studies stay mostly with text features plus hand-built
+meta-features (missing company profile, missing logo) and linear, tree or ensemble classifiers.
+Taneja et al.\textsuperscript{\cite{taneja2025}} tabulate ten EMSCAD studies from 2017 to 2024 whose
+best models are random forests, rule learners, extra trees or SVMs, with 91\% to 99.9\% accuracy.
+Amaar et al.\textsuperscript{\cite{amaar2022}} report 99.9\% accuracy on a resampled test set,
+which does not reflect the real class balance.
+
+\textbf{Transformers.} Akram et al.\textsuperscript{\cite{akram2024}} fine-tune BERT and RoBERTa with
+ten SMOTE variants and report about 90\% balanced accuracy and recall. Fraud-BERT\textsuperscript{\cite{taneja2025}}
+fine-tunes BERT-base\textsuperscript{\cite{devlin2019}} on twelve concatenated text columns and reports
+F1 0.93 on one 80:20 split, against F1 0.89 for an SVM and 0.78 for logistic regression on the same
+split. That paper reports no seeds, no validation split and no deduplication, although the authors
+note that EMSCAD contains duplicate entries.
+
+\textbf{Imbalance and evaluation.} SMOTE\textsuperscript{\cite{chawla2002}} oversamples the minority
+class with synthetic examples. Saito and Rehmsmeier\textsuperscript{\cite{saito2015}} show that ROC
+curves look optimistic on imbalanced data and that precision-recall curves are more informative.
+
+\textbf{Explanation.} LIME\textsuperscript{\cite{ribeiro2016}} and SHAP\textsuperscript{\cite{lundberg2017}}
+explain single predictions of any model. Integrated Gradients\textsuperscript{\cite{sundararajan2017}}
+is specific to differentiable models and satisfies completeness: the attributions of an input add
+up to the change in the model output from a baseline input to that input.
+
+\textbf{Gap.} Reported EMSCAD results are hard to compare because protocols differ, single-split
+results carry no estimate of their spread, and the gain of a fine-tuned transformer over a tuned
+word-count baseline is rarely isolated. This project fixes one protocol and puts every model
+through it.

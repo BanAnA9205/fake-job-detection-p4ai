@@ -1210,9 +1210,10 @@ Numbers are test PR-AUC, means over the 5 split seeds in the first table.
 
 - Every supervised text model beats the dummy floor (0.049) by a wide margin: 0.77 to 0.85, except
   the single decision tree (0.40).
-- Logistic regression with TF-IDF (0.821), with BM25 (0.847) and the MLP (0.846) are within seed
-  noise of each other: the spread across seeds (std about 0.06 to 0.08) is larger than the gaps
-  between them. The MLP costs about 7 minutes per seed against 1 to 1.5 for the logistic regressions.
+- Logistic regression with TF-IDF (0.821), with BM25 (0.847) and the MLP (0.846) overlap: the
+  spread across seeds (std about 0.06 to 0.08) is larger than the gaps between their means. Paired
+  by seed, though, BM25 beats TF-IDF on all 5 seeds (mean +0.026), while the MLP and BM25 split
+  3 to 2 (mean -0.001). The MLP costs about 7 minutes per seed against 1 to 1.5 for the logistic regressions.
 - Complement Naive Bayes reaches 0.773: below TF-IDF logistic regression on 4 of 5 seeds (mean
   difference -0.048), but with the smallest spread across seeds of any supervised model (std 0.029).
 - The one-class SVM, trained on real ads only, scores 0.057 (ROC-AUC 0.47), no better than the
@@ -1243,8 +1244,8 @@ Numbers are test PR-AUC, means over the 5 split seeds (seed 0 for the error anal
 - Stacking the two (a logistic regression on the two saved scores, fitted on validation) reaches
   0.878 (std 0.068), the best result of the project. It beats BM25 logistic regression on all 5
   seeds (+0.022 to +0.036, mean +0.030) and DistilBERT on all 5 (mean +0.062). The paired gain is
-  small but has the same sign on every seed, unlike the gaps between single models. The stacker
-  weights BM25 about twice as much as DistilBERT. Caveat: DistilBERT's validation scores come from
+  small but has the same sign on every seed, unlike the gaps between single models. Per standard
+  deviation of its input, BM25's weight in the stacker is 3 to 6 times DistilBERT's. Caveat: DistilBERT's validation scores come from
   the epoch chosen on validation, so they are slightly optimistic; the test rows were never used.
 - Frozen sentence embeddings with a logistic-regression head reach 0.524: well above the dummy but
   far below TF-IDF. A 384-dimensional summary of the meaning of an ad loses the specific words

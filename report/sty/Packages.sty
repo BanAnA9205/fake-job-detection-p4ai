@@ -1,0 +1,67 @@
+% =============================================================================
+% Core packages -- loaded for every report. Keep this list to what the
+% template actually uses; add to the "optional extras" block below instead
+% of bloating this section with packages a given report may never need.
+% =============================================================================
+
+% Math
+\usepackage{amsmath, amssymb, amsthm}
+
+% Page layout
+\usepackage[a4paper, total={18cm, 24cm}]{geometry}
+\usepackage{fancyhdr}
+\usepackage{lastpage}
+\usepackage{float}          % honours [H] figure/table placement
+\usepackage{indentfirst}
+
+% Language and fonts
+% (no encoding package needed: UTF-8 is the LaTeX kernel default since 2018)
+\usepackage[T5]{fontenc}    % switch to [T1]{fontenc} if Vietnamese glyphs aren't needed
+\usepackage[vietnamese, english]{babel} % drop 'vietnamese' if not needed
+\usepackage[letterspace=500]{microtype} % tracking for \textsc; T5/vntex protrusion metrics are incomplete, so protrusion stays off
+\microtypesetup{protrusion=false}
+
+% Color and boxed environments
+\usepackage[svgnames]{xcolor}
+\usepackage[skins,theorems]{tcolorbox} % only the libraries the boxed theorem envs in Presets.sty need
+
+% Links, citations, references
+\usepackage{xurl}           % also loads url; breaks long URLs at more points
+\usepackage[backend=biber, style=numeric]{biblatex}
+\addbibresource{refs.bib}
+\renewcommand*{\bibfont}{\normalfont}
+\usepackage{csquotes}       % recommended by biblatex whenever babel is loaded
+
+% Figures, tables, code
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{enumitem}       % lettered sub-lists, e.g. a. b. c.
+\usepackage{array}          % >{\raggedright\arraybackslash}p{...} table columns
+\usepackage{booktabs}       % \toprule / \midrule / \bottomrule in result tables
+
+% ALWAYS load this one last
+\usepackage{hyperref}
+\hypersetup{
+  colorlinks   = true,     % Colours links instead of ugly boxes
+  urlcolor     = blue,     % Colour for external hyperlinks
+  linkcolor    = black,    % Colour of internal links
+  citecolor    = FireBrick % Colour of citations
+}
+
+% =============================================================================
+% Optional extras -- uncomment only what a given report actually uses.
+% =============================================================================
+% \usepackage{titlesec}         % restyle \section/\subsection fonts (actively maintained)
+% \usepackage{framed}           % shaded/framed text blocks
+% \usepackage{pdfpages}         % import pages from an external PDF
+% \usepackage{subcaption}       % sub-figures with individual captions
+% \usepackage{multirow}         % multi-row table cells
+% \usepackage{makecell}         % multi-line table cells
+% \usepackage{centernot}        % negated relations, e.g. \centernot\Rightarrow
+% \usepackage{tikz}             % diagrams
+% \usepackage{pgfplots}         % plots (built on tikz)
+% \pgfplotsset{compat=1.18}
+% \usepackage{mathrsfs}         % \mathscr font
+% \usetikzlibrary{arrows}
+
+\endinput

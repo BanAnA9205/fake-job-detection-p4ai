@@ -1,0 +1,172 @@
+\section{Method}
+\label{method}
+
+\subsection{Evaluation protocol}
+\label{protocol}
+
+The protocol is the same for every model, so differences in the results come from the models and
+not from how they were measured.
+
+\textbf{Stage 1 -- clean.} Drop exact duplicates and assign each ad its description group
+(Section~\ref{data}).
+
+\textbf{Stage 2 -- split.} Load the saved grouped 60/20/20 split of the current split seed. The
+seeds are 0 to 4.
+
+\textbf{Stage 3 -- fit and tune on training rows only.} Every transformer (vectoriser, encoder,
+scaler) is fitted inside the model pipeline on the training rows, so no statistic of validation or
+test rows reaches the model. Hyper-parameters are tuned by random search (4 candidates from the
+grid of Table~\ref{tab:models}) with 3-fold \texttt{StratifiedGroupKFold} on the training rows,
+scoring PR-AUC; the best candidate is refitted on all training rows.
+
+\textbf{Stage 4 -- choose the threshold on validation.} The threshold that maximises F1 on the
+validation scores turns scores into fraud / real decisions. The dummy is the exception: its score
+is the same for every ad, so a tuned threshold would flag everything, and it keeps 0.5.
+
+\textbf{Stage 5 -- score test once.} The test rows are scored once per (model, seed), at the
+validation threshold. Validation and test metrics, the threshold, the chosen hyper-parameters and
+the raw scores are saved; test numbers are not printed while experiments run, so they cannot
+steer a choice.
+
+\textbf{Why PR-AUC.} PR-AUC (average precision) measures how well a model ranks frauds above real
+ads, without fixing a threshold, and its floor is the fraud rate (0.049) rather than 0.5. ROC-AUC
+counts true negatives, which are plentiful at 95\% real ads, so it stays high even for weak
+models\textsuperscript{\cite{saito2015}}: in Table~\ref{tab:headline} the decision tree has ROC-AUC
+0.843 but PR-AUC 0.402. Ranking also matches the use case, a moderator queue ordered by score.
+
+\textbf{Why F1 for the threshold.} F1 weighs a missed fraud and a false alarm equally at the chosen
+point. A job board with a known cost ratio would replace it with that cost; the ranking metrics do
+not depend on this choice.
+
+\textbf{Why five seeds.} One split gives one number with no error bar. Five grouped splits show how
+much a score moves when only the split changes, and allow paired comparisons: two models evaluated
+on the same split face the same hard ads, so their per-seed difference is far less noisy than
+either score alone (Section~\ref{results}).
+
+\subsection{Features}
+
+One \texttt{ColumnTransformer} builds a sparse model matrix with five blocks
+(Table~\ref{tab:features}); the five text fields are joined into one text column first.
+
+\begin{table}[tb]
+\centering
+\small
+\begin{tabular}{l>{\raggedright\arraybackslash}p{0.5\linewidth}r}
+\toprule
+\textbf{Block} & \textbf{Transformer} & \textbf{Columns} \\
+\midrule
+Text & TF-IDF (sublinear term frequency, word 1- and 2-grams, min.\ 3 documents) or BM25 & 20,000 \\
+Nominal & One-hot of employment type, industry, function, country; categories under 30 ads share one column & 110 \\
+Ordinal & Required experience and education as ordered levels & 2 \\
+Numeric & Description and title length, exclamation marks, share of capitals; scaled & 4 \\
+Binary & Telecommuting, logo, questions, 9 engineered flags; near-constant flags dropped & 12 \\
+\bottomrule
+\end{tabular}
+\caption{Blocks of the model matrix (column counts for the default settings on the seed-0
+training rows; the grids change the vocabulary size).}
+\label{tab:features}
+\end{table}
+
+\textbf{TF-IDF versus BM25.} BM25\textsuperscript{\cite{robertson2009}} is the ranking function of
+classic search engines. It differs from TF-IDF in two ways: repeating a word has diminishing
+returns (term frequency saturates, controlled by $k_1$), and long ads are discounted against the
+average length (controlled by $b$). The logistic regressions on TF-IDF and on BM25 share
+everything else, so their difference isolates the word weighting.
+
+\subsection{Models}
+
+Each model is in the lineup to answer one question (Table~\ref{tab:models}).
+
+\begin{table}[tb]
+\centering
+\small
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.17\linewidth}>{\raggedright\arraybackslash}p{0.44\linewidth}>{\raggedright\arraybackslash}p{0.31\linewidth}}
+\toprule
+\textbf{Model} & \textbf{Why it is in the lineup} & \textbf{Tuned on} \\
+\midrule
+Majority dummy & The floor: always ``real''. Its PR-AUC equals the fraud rate. & -- \\
+TF-IDF LR & The standard text baseline: linear, fast, readable through its coefficients.
+  \texttt{class\_weight="balanced"} makes a missed fraud cost about 20 false alarms. &
+  $C \in \{0.1, 1, 10\}$; vocabulary 10k or 30k; 1-grams or 1- and 2-grams \\
+BM25 LR & Same model, BM25 weighting: does the word weighting matter? &
+  $C$; $k_1 \in \{1.2, 1.5, 2\}$; $b \in \{0.5, 0.75, 1\}$ \\
+Decision tree & Readable rules; tests whether non-linear splits help on sparse text. &
+  depth $\{10, 20, 40\}$; min.\ leaf $\{2, 5, 20\}$ \\
+TF-IDF MLP & One hidden layer: can feature interactions beat the linear model? Early stopping
+  on a 10\% holdout of the training rows. & 64, 128 or 256 units; L2 $\{10^{-4}, 10^{-3}, 10^{-2}\}$ \\
+Complement NB & The classic text-classification baseline, in the variant designed for imbalanced
+  classes\textsuperscript{\cite{rennie2003}}. & smoothing $\alpha \in \{0.01, 0.1, 0.3, 1\}$; vocabulary \\
+One-class SVM & Anomaly detection: fitted on real training ads only, flags ads unlike them. Tests
+  whether fraud can be found without fraud labels\textsuperscript{\cite{scholkopf2001}}. TF-IDF is
+  reduced by truncated SVD and normalised first, because an RBF kernel needs dense input. &
+  $\nu \in \{0.01, 0.05, 0.1, 0.2\}$; SVD 100 or 200 dims \\
+\bottomrule
+\end{tabular}
+\caption{Classical models (all in scikit-learn\textsuperscript{\cite{pedregosa2011}}). LR is
+logistic regression.}
+\label{tab:models}
+\end{table}
+
+\subsection{Deep models}
+
+The deep models run on a GPU server (notebook \texttt{03}) on the same saved splits, so their
+results are directly comparable with the classical ones.
+
+\textbf{MiniLM embeddings + LR.} A frozen sentence encoder
+(\texttt{all-MiniLM-L6-v2}\textsuperscript{\cite{reimers2019,wang2020minilm}}) maps each ad to one
+384-dimensional vector; a balanced logistic regression is trained on those vectors, with $C \in
+\{0.1, 1, 10\}$ picked by validation PR-AUC. This is the transfer-learning recipe of the course:
+reuse a pretrained representation, train only a small head.
+
+\textbf{Fine-tuned DistilBERT.} DistilBERT\textsuperscript{\cite{sanh2019}} is a smaller, faster
+distillation of BERT\textsuperscript{\cite{devlin2019}}; all its weights are updated on our training
+rows. Settings: the first 256 tokens of the joined text; AdamW, learning rate $2 \cdot 10^{-5}$,
+weight decay 0.01, linear warm-up over the first 10\% of steps then linear decay; batch size 128;
+up to 5 epochs. The loss uses the square root of the balanced class weights, a softer push towards
+fraud than the classical models get; the validation threshold sets the final trade-off. After each
+epoch the validation PR-AUC is computed, and the weights of the best epoch are kept (training stops
+after 2 epochs without improvement). The seed fixes the classification head's initialisation and
+the data order, so a run can be repeated.
+
+\textbf{Zero-shot language model.} Qwen2.5-1.5B-Instruct\textsuperscript{\cite{qwen2024}}, an
+instruction-tuned model, is asked for each ad (first 512 tokens): \emph{``Is this job ad
+fraudulent? Answer Yes or No.''} The score is its probability of answering \emph{Yes}, renormalised
+over \emph{Yes} and \emph{No} and read from the next-token logits, so no text is generated. It never
+sees a label; it tests whether a general model already knows what EMSCAD fraud looks like.
+
+\subsection{Stacking}
+\label{stacking}
+
+DistilBERT and BM25 LR catch different frauds (Section~\ref{explain}), so we combine them by
+stacking\textsuperscript{\cite{wolpert1992}}: a logistic regression whose only two inputs are the
+logits of the two models' saved scores.
+
+\textbf{In:} the validation and test scores that both models saved for one split seed.
+
+\textbf{How:} the stacker is fitted on the validation rows, because both base models were trained
+on the training rows and their training scores are over-confident. The threshold comes from 5-fold
+grouped out-of-fold predictions inside the validation rows, so it never sees a row the stacker was
+fitted on. The stacker is then refitted on all validation rows.
+
+\textbf{Out:} test scores computed once, evaluated at that threshold like every other model.
+
+\textbf{Why BM25 LR as the partner.} It is the best single classical model, so the stack answers
+whether DistilBERT adds anything to the strongest baseline, not to a weak one.
+
+\subsection{Explanation}
+
+\textbf{Linear model.} The coefficients of the logistic regression, mapped back to feature names,
+give a global view: which words and metadata values push an ad towards fraud.
+
+\textbf{DistilBERT.} Integrated Gradients\textsuperscript{\cite{sundararajan2017}}, computed with
+Captum\textsuperscript{\cite{kokhlikyan2020}}, attributes the fraud score of one ad to its tokens. The
+baseline is the same ad with every token replaced by \texttt{[PAD]} (except \texttt{[CLS]} and
+\texttt{[SEP]}); the path integral uses 50 steps. It runs on 10 seed-0 test ads right after
+training, because the fine-tuned weights are not saved: the 4 highest-scored frauds, the 3
+lowest-scored frauds, and the 3 highest-scored real ads. We chose it over LIME or SHAP because it
+uses the model's own gradients and its attributions must add up to the score change, which gives a
+built-in check.
+
+\textbf{Error analysis.} From the saved test scores of seed 0: which frauds each model catches at
+its own threshold, which frauds no model catches, and where DistilBERT and the linear model
+disagree.

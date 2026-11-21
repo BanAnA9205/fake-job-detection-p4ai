@@ -1,0 +1,126 @@
+\section{Results}
+\label{results}
+
+\begin{readingnote}[Before reading Table~\ref{tab:headline}]
+PR-AUC and ROC-AUC rank ads without a threshold. F1, precision and recall are measured at each
+model's own validation-chosen threshold, so they depend on that choice as well as on the model.
+Each cell is the mean $\pm$ standard deviation over the five split seeds; the standard deviation
+measures how much a score moves with the split, not the error of a single run.
+\end{readingnote}
+
+\begin{table}[tb]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lcccccr}
+\toprule
+\textbf{Model} & \textbf{PR-AUC} & \textbf{ROC-AUC} & \textbf{F1} & \textbf{Precision} & \textbf{Recall} & \textbf{s/seed} \\
+\midrule
+\tabinput{includes/tab_headline}
+\bottomrule
+\end{tabular}
+\caption{Test metrics over five split seeds, sorted by PR-AUC. The last column is the wall-clock
+time per seed (tuning included; classical models on a laptop CPU, deep models on a GPU). The
+zero-shot time is for scoring all 17,599 ads once; the stack takes under a second.}
+\label{tab:headline}
+\end{table}
+
+\begin{figure}[tb]
+\centering
+\includegraphics[width=0.85\linewidth]{test_pr_auc_seeds.pdf}
+\caption{Test PR-AUC of every model on every split seed. Dots are seeds, the black bar is the
+mean, the dashed line the fraud rate.}
+\label{fig:seeds}
+\end{figure}
+
+\textbf{Floor.} The majority dummy scores 0.049, the fraud rate. Every supervised model clears it
+by a wide margin; the three label-free models (zero-shot language model, one-class SVM, dummy) do
+not.
+
+\textbf{Spread across splits.} The standard deviations (0.03 to 0.08) are as large as most gaps
+between the top models, and in Figure~\ref{fig:seeds} their dots overlap. Read unpaired, the top
+five models cannot be told apart.
+
+\textbf{Paired comparison.} Every model is evaluated on the same five splits, so the right test is
+the per-seed difference (Table~\ref{tab:paired}). A hard split is hard for every model, and the
+difference cancels that shared part of the noise.
+
+\begin{table}[tb]
+\centering
+\small
+\begin{tabular}{lrrrrrrc}
+\toprule
+\textbf{Pair (A $-$ B)} & \textbf{s0} & \textbf{s1} & \textbf{s2} & \textbf{s3} & \textbf{s4} & \textbf{Mean} & \textbf{A wins} \\
+\midrule
+\tabinput{includes/tab_paired}
+\bottomrule
+\end{tabular}
+\caption{Paired differences in test PR-AUC per split seed.}
+\label{tab:paired}
+\end{table}
+
+\textbf{Stack.} The stack of DistilBERT and BM25 LR is the best model (0.878). It beats BM25 LR on
+all five seeds by +0.022 to +0.036, and DistilBERT on all five by +0.051 to +0.087. Its precision
+(0.902) is the highest of any model, at a recall similar to BM25 LR's. Measured per standard
+deviation of its input, BM25 LR's weight in the stacker is 3 to 6 times DistilBERT's on every seed:
+the stack is mostly BM25 LR, corrected by DistilBERT.
+
+\textbf{BM25 versus TF-IDF.} BM25 LR beats TF-IDF LR on all five seeds (mean +0.026), although the
+unpaired means differ by less than one standard deviation. Saturating repeated words and
+discounting long ads helps a little but consistently.
+
+\textbf{DistilBERT alone.} Fine-tuned DistilBERT reaches 0.816: below BM25 LR on all five seeds
+(mean $-$0.032) and level with TF-IDF LR (it wins on one seed of five). It also costs a GPU.
+
+\textbf{MLP and Complement NB.} The MLP equals BM25 LR (mean difference $-$0.001, 3 wins of 5) at
+about six times the time. Complement NB loses to TF-IDF LR on 4 of 5 seeds (mean $-$0.048) but has
+the smallest spread of any supervised model (std 0.029). It is also the most sensitive to its one
+hyper-parameter: on the seed-0 validation rows it scores 0.427 untuned ($\alpha = 1$) and 0.867
+tuned ($\alpha = 0.01$).
+
+\textbf{Decision tree.} 0.402, far below the linear models, with the largest gap between training
+and test PR-AUC (0.24). A single tree splits on a handful of words and overfits them.
+
+\begin{figure}[tb]
+\centering
+\begin{minipage}{0.52\linewidth}
+\centering
+\includegraphics[width=\linewidth]{pr_curves_seed0.pdf}
+\end{minipage}\hfill
+\begin{minipage}{0.45\linewidth}
+\centering
+\includegraphics[width=\linewidth]{bert_epochs.pdf}
+\end{minipage}
+\caption{Left: test precision-recall curves of seed 0. Right: DistilBERT validation PR-AUC per
+epoch, one thin line per seed, the thick line is the mean.}
+\label{fig:curves}
+\end{figure}
+
+\textbf{Precision-recall curves.} In Figure~\ref{fig:curves} (left) the stack lies on or above both
+of its inputs over most of the recall range. The three strong curves keep precision above 0.8 up
+to a recall of about 0.6 and then fall; the frauds beyond that point are the hard ones
+(Section~\ref{explain}).
+
+\textbf{DistilBERT training.} Validation PR-AUC jumps from about 0.6 after epoch 1 to about 0.8
+after epoch 2 and is flat from epoch 3 on (Figure~\ref{fig:curves}, right); the best epoch is 3,
+4 or 5 depending on the seed. More epochs would not help. The chosen thresholds range from 0.25 to
+0.94 across seeds, because the fine-tuned model pushes most scores close to 0 or 1, so a small
+shift in scores moves the threshold a lot.
+
+\textbf{Frozen embeddings.} MiniLM embeddings with LR reach 0.524, between the tree and the text
+models. A single 384-dimensional summary of what an ad means loses the specific words (pay
+amounts, ``data entry'') that separate fraud in this dataset; fine-tuning the whole encoder
+recovers them (0.816).
+
+\textbf{Label-free models.} Neither detector that works without fraud labels beats the dummy by a
+useful margin.
+\begin{itemize}[nosep]
+  \item \textbf{One-class SVM:} 0.057, ROC-AUC 0.47. On the same SVD features, a supervised
+        logistic regression reaches a seed-0 validation PR-AUC of 0.685 against the one-class SVM's
+        0.066, so the information is in the features and the anomaly assumption is what fails:
+        fraudulent ads are not unusual ads, many of them are generic template postings.
+  \item \textbf{Zero-shot Qwen2.5-1.5B:} 0.078, ROC-AUC 0.49. It answers ``fraudulent'' for 98\% of
+        the seed-0 test ads, and its bf16 scores take only 47 distinct values over 3,520 ads. A general
+        model asked a general question does not know what fraud looks like in EMSCAD; the labels are
+        what make the supervised models work.
+\end{itemize}

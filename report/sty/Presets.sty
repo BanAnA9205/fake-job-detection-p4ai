@@ -1,0 +1,92 @@
+% For codes
+\lstdefinestyle{C++}{
+    language=C++,                    % Specifies the language
+    basicstyle=\ttfamily\footnotesize, % Font size and type
+    keywordstyle=\color{blue}\bfseries, % Keywords in bold blue
+    commentstyle=\color{green!50!black}\itshape, % Comments in italic green
+    stringstyle=\color{red},         % Strings in red
+    numberstyle=\tiny\color{gray},   % Line numbers style
+    numbers=left,                    % Line numbers on the left
+    stepnumber=1,                    % Numbers every line
+    numbersep=10pt,                  % Space between line numbers and code
+    backgroundcolor=\color{black!3}, % Light neutral background
+    frame=single,                    % Adds a frame around the code
+    tabsize=4,                       % Sets tab size
+    captionpos=b,                    % Caption below the listing
+    breaklines=true,                 % Line breaking
+    breakatwhitespace=false,         % Only break at whitespace if needed
+    showspaces=false,                % Don't show spaces
+    showtabs=false,                  % Don't show tabs
+    showstringspaces=false,          % Don't mark spaces in strings
+    morekeywords={nullptr, size_t, uint32_t, int32_t, int64_t}, % Custom keywords
+}
+
+\lstdefinestyle{Python}{frame=tb,
+  numbers=left,
+  stepnumber=1,
+  language=Python,
+  aboveskip=3mm,
+  belowskip=3mm,
+  showstringspaces=false,
+  columns=flexible,
+  basicstyle={\small\ttfamily},
+  numberstyle=\tiny\color{DimGray},
+  keywordstyle=\color{blue},
+  commentstyle=\color{DarkGreen},
+  stringstyle=\color{FireBrick},
+  breaklines=true,
+  breakatwhitespace=true,
+  tabsize=3
+}
+
+\lstset{style=Python} % default listing style if [style=...] is omitted
+
+% -----------------------------------------------------------------------
+% Boxed theorem/lemma/example environments (tcolorbox), for stating and
+% numbering formal results. Rename the display titles below (2nd argument
+% of \newtcbtheorem) to match your report's language.
+% -----------------------------------------------------------------------
+\definecolor{ReportBoxBg}{HTML}{EEF1F5}
+\definecolor{ReportBoxTitleText}{HTML}{F5F7FA}
+\definecolor{ReportBoxTitleBg}{HTML}{2E3B4E}
+
+\tcbset{
+  reportbox/.style={
+    colback=ReportBoxBg,
+    colframe=Black,
+    fonttitle=\bfseries,
+    coltitle=ReportBoxTitleText,
+    colbacktitle=ReportBoxTitleBg,
+    enhanced,
+    attach boxed title to top left={
+      yshift=-1.8mm,
+      xshift=3mm
+    },
+    boxed title style={rounded corners},
+    rounded corners
+  }
+}
+
+\newtcbtheorem[auto counter, number within=section]{boxedtheorem}{Theorem}{reportbox}{th}
+\newtcbtheorem[auto counter, number within=section]{boxedlemma}{Lemma}{reportbox}{lem}
+\newtcbtheorem[auto counter, number within=section]{boxedconj}{Conjecture}{reportbox}{conj}
+\newtcbtheorem[auto counter, number within=section]{boxedprop}{Proposition}{reportbox}{prop}
+\newtcbtheorem[auto counter, number within=section]{boxedineq}{Inequality}{reportbox}{ineq}
+\newtcbtheorem[auto counter, number within=section]{boxedeg}{Example}{reportbox}{eg}
+
+% -----------------------------------------------------------------------
+% Unnumbered "reading note" callout -- a caveat the reader must have before
+% a figure/table/procedure, not a formal result. Amber accent so it reads
+% as caution, distinct from the slate/navy boxedtheorem family above.
+% -----------------------------------------------------------------------
+\definecolor{NoteBoxBg}{HTML}{FFF6E5}
+\definecolor{NoteBoxFrame}{HTML}{B8860B}
+\newtcolorbox{readingnote}[1][Reading note]{
+  colback=NoteBoxBg, colframe=NoteBoxFrame, fonttitle=\bfseries,
+  coltitle=Black, colbacktitle=NoteBoxBg, enhanced,
+  attach boxed title to top left={yshift=-1.8mm, xshift=3mm},
+  boxed title style={rounded corners, colframe=NoteBoxFrame},
+  rounded corners, title=#1
+}
+
+\endinput

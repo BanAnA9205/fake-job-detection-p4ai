@@ -1,0 +1,101 @@
+\section{What the models rely on}
+\label{explain}
+
+\subsection{TF-IDF logistic regression: global coefficients}
+
+\textbf{Setup.} TF-IDF LR refitted on the seed-0 training rows with its tuned settings ($C = 10$,
+30,000 terms, 1- and 2-grams). Table~\ref{tab:terms} lists the ten largest coefficients on each side.
+
+\begin{table}[tb]
+\centering
+\small
+\begin{tabular}{lrlr}
+\toprule
+\multicolumn{2}{c}{\textbf{Towards fraud}} & \multicolumn{2}{c}{\textbf{Towards real}} \\
+\textbf{Feature} & \textbf{Coef.} & \textbf{Feature} & \textbf{Coef.} \\
+\midrule
+\tabinput{includes/tab_terms}
+\bottomrule
+\end{tabular}
+\caption{Largest coefficients of TF-IDF LR (seed 0). Plain entries are text terms; ``industry'' and
+``country'' entries are one-hot metadata columns.}
+\label{tab:terms}
+\end{table}
+
+\textbf{Money words.} \emph{money}, \emph{income} and \emph{000} (from amounts such as 50,000) push
+towards fraud, in line with the money-word flag of Section~\ref{data}.
+
+\textbf{Poster templates.} The phrase \emph{apply using} (the stop word in ``apply using the link''
+is dropped) appears in 41 ads, 35 of them fraudulent; \emph{accion} is an employer name found in 26
+ads, 16 of them fraudulent. These are the wording of a few repeated posters, not general scam
+language. The grouped split keeps ads with the same description together, but a poster's
+different descriptions (41 groups for \emph{apply using}) still reach both sides of the split.
+
+\textbf{Signals of a real employer.} Established-company words (\emph{growing}, \emph{companies}),
+specific industries (insurance, internet, restaurants) and the countries Greece and the Philippines
+push towards real. The country entries are the collection artefact flagged in Section~\ref{data}.
+
+\subsection{DistilBERT: Integrated Gradients on single ads}
+
+\textbf{Setup.} Ten seed-0 test ads, chosen by score as in Section~\ref{method}. Table~\ref{tab:ig}
+lists, per ad, the words with the largest push towards fraud, after merging word pieces and dropping
+stop words and punctuation (\$ and numbers are kept).
+
+\textbf{Check.} Each ad's attributions add up to $+0.50$ to $+0.53$ for the flagged ads and
+$-0.48$ for the missed ones, which is the change in fraud probability from the all-\texttt{[PAD]}
+baseline (about 0.5) to the ad itself. Integrated Gradients must satisfy this completeness property,
+so the attributions are numerically sound.
+
+\begin{table}[tb]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{llrr>{\raggedright\arraybackslash}p{0.36\linewidth}}
+\toprule
+\textbf{Kind} & \textbf{Title} & \textbf{Score} & \textbf{Sum} & \textbf{Top words towards fraud} \\
+\midrule
+\tabinput{includes/tab_ig}
+\bottomrule
+\end{tabular}
+\caption{Integrated Gradients for DistilBERT (seed 0). Score is the fraud probability, Sum the sum
+of all token attributions. A word can be listed twice when it occurs twice in the ad.}
+\label{tab:ig}
+\end{table}
+
+\textbf{Caught scams.} The two clearest scams (part-time and weekend cash jobs) are pushed by pay
+amounts and money words: \$, 500, 400, 450, \emph{earn}. These are the same cues as the money-word
+flag and the linear model's top terms.
+
+\textbf{False alarms.} The three real ads DistilBERT is most sure about are part-time, data-entry
+and payroll-clerk ads that quote a pay rate (\$20/hr). They share the surface features of the
+scams, so a model that reads only the text cannot separate them.
+
+\textbf{Missed frauds.} The three missed frauds (\emph{DATA ENTRY}, \emph{Front-End Developer},
+\emph{Hotel Workers Needed}) read like ordinary job descriptions; their attributions sum to $-0.48$,
+so the text as a whole pushes towards real and no single word stands out.
+
+\textbf{Artefact.} One caught fraud is pushed by a token like \texttt{ddb08035...}: the hash that
+EMSCAD inserted in place of a real URL. A hash identifies one specific link, so the model has
+partly memorised a poster rather than a pattern.
+
+\subsection{Error analysis}
+
+\textbf{DistilBERT versus TF-IDF LR.} At their own thresholds on the 171 seed-0 test frauds, both
+catch 109, only DistilBERT catches 12, only TF-IDF LR catches 15, and 35 get past both. The
+Spearman correlation between their test scores is only 0.39. Two models with similar PR-AUC
+that rank ads this differently make different mistakes, which is the condition for stacking to help
+(Section~\ref{stacking}). DistilBERT raises more false alarms at its threshold (28 against 19).
+
+\textbf{Frauds no model catches.} 18 seed-0 test frauds are missed by every supervised model at its
+own threshold:
+\begin{itemize}[nosep]
+  \item 11 IT and engineering roles written like ordinary postings (business analyst, SAP
+        engineer, integration engineer, process engineer), four of them in one shared
+        ``Hiring for ... Position: ... Job Type: Full Time'' layout;
+  \item one call-centre ad present three times, all in the test split because the split is grouped;
+  \item two hotel jobs in London and one vacancy that names a real oil and gas company;
+  \item one customer-assistant ad.
+\end{itemize}
+Only 3 of the 18 contain money words, against 43\% of all seed-0 test frauds, and several borrow
+the name of a real employer. Their text barely differs from real ads; catching them would need information outside the ad, such
+as the poster's account history.

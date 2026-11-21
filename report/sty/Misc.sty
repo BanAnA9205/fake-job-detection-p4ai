@@ -1,0 +1,30 @@
+% WATERMARK (optional, e.g. for drafts)
+%\AddToHook{shipout/foreground}{
+%  \begin{tikzpicture}[remember picture,overlay]
+%    \node[Indigo,rotate=45,scale=10,opacity=0.3] at (current page.center) {DRAFT};
+%  \end{tikzpicture}
+%}
+
+% Decorations on each page -- EDIT the four \lhead/\rhead/\lfoot fields below.
+\graphicspath{{img/}}
+\pagestyle{fancy}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.4pt}
+
+\lhead{
+    \small HCMUT -- CO3135 P4AI-DS
+}
+
+\rhead{
+    \small Fake job posting detection
+}
+
+\cfoot{}
+
+\lfoot{
+    \small Group 7
+}
+
+\rfoot{\small page \thepage\ of \begin{NoHyper}\pageref{LastPage}\end{NoHyper}}
+
+\endinput

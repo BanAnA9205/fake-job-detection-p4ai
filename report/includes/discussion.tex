@@ -1,0 +1,50 @@
+\section{Discussion}
+\label{discussion}
+
+\subsection{Why word counts beat a pretrained transformer here}
+
+\textbf{Observation.} BM25 LR beats fine-tuned DistilBERT on all five seeds, and the stack weights
+BM25 LR far more heavily.
+
+\textbf{Likely cause.} The training rows hold 514 frauds, and a good part of the fraud signal is in exact
+words: money amounts, a few posters' templates, employer names, the placeholders EMSCAD put in
+place of contact details. A sparse linear model gives each such word its own weight and learns it
+from a handful of examples, so it is well suited to this signal. DistilBERT reads only the first
+256 tokens and spreads its capacity over meaning, which helps on the ads where the wording is new
+(the 12 frauds only DistilBERT catches) but adds little where a known phrase already decides.
+
+\textbf{Consequence.} The useful role of the transformer in this project is as a second opinion
+that makes different mistakes, which is what the stack exploits. On its own it costs a GPU and does
+not pay for it.
+
+\subsection{Why the label-free detectors fail}
+
+\textbf{Likely cause.} The one-class SVM assumes fraud is unusual, and the zero-shot model assumes fraud
+looks like a textbook scam. In EMSCAD many frauds are generic, well-formatted postings (the 11 IT
+roles of Section~\ref{explain}), so neither assumption holds. A supervised model on the same SVD
+features finds the signal the one-class SVM misses, which isolates the assumption as the cause.
+
+\textbf{Consequence.} Labels are the scarce resource that matters. A job board without labelled
+fraud cannot reach the supervised results by switching to anomaly detection or a general language
+model.
+
+\subsection{Limitations}
+
+\begin{itemize}[nosep]
+  \item \textbf{One dataset.} All results are on EMSCAD. The country artefact and the poster
+        templates mean part of what the models learned is specific to how EMSCAD was collected, and
+        would not transfer unchanged to another job board.
+  \item \textbf{Small tuning budget.} Random search tries 4 candidates with 3-fold CV per model and
+        seed, a deliberate limit to keep the 35 classical runs to about an hour on a laptop. Larger
+        searches could move individual models, but every model got the same budget.
+  \item \textbf{Validation used twice.} DistilBERT picks its best epoch on validation, the MiniLM
+        head picks $C$ on validation, and both then pick their threshold on the same rows, so their
+        validation scores are slightly optimistic. The stacker is fitted on those same validation
+        scores. The test rows are never used for any choice, so the test numbers stay honest.
+  \item \textbf{Five seeds, one data set.} The five splits reuse the same 17,599 ads, so the
+        standard deviation measures sensitivity to the split, not sampling error over new ads.
+  \item \textbf{Explanations are local.} Integrated Gradients covers 10 ads from one seed, and the
+        coefficient table one refit; they show what drives these cases, not a general rule.
+  \item \textbf{Truncation.} DistilBERT sees 256 tokens and the zero-shot model 512, so long ads
+        are cut; the TF-IDF models see the whole ad.
+\end{itemize}

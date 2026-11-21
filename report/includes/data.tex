@@ -1,0 +1,77 @@
+\section{Data exploration and the decisions it drives}
+\label{data}
+
+Every exploration step in notebook \texttt{01} answers a question that changes a later choice.
+Table~\ref{tab:eda} lists what we found and what we did about it; the chunks below give the numbers.
+
+\begin{table}[tb]
+\centering
+\small
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.40\linewidth}>{\raggedright\arraybackslash}p{0.52\linewidth}}
+\toprule
+\textbf{Finding} & \textbf{Decision} \\
+\midrule
+4.84\% of ads are fraudulent. & PR-AUC as the headline metric; decision threshold chosen on
+validation; class weights instead of resampling. \\
+281 exact duplicate rows; 4,552 rows share their description with another row. & Drop exact
+duplicates, then split by description group so that no description sits in two splits. \\
+Missing fields are much more common in fraudulent ads. & Keep a missing-value flag per field
+instead of imputing the gap away. \\
+The text fields hold the strongest signal. & Join the five text fields into one text column and
+keep it at the centre of every model. \\
+Real URLs, emails and phone numbers are already replaced by placeholders such as
+\texttt{\#URL\_...\#}. & Contact flags look for the placeholders, not for real addresses. \\
+Some countries have 0\% fraud over hundreds of ads. & Keep country as a feature, but read
+the results with this collection artefact in mind (Section~\ref{discussion}). \\
+\bottomrule
+\end{tabular}
+\caption{Exploration findings and the decision each one drives.}
+\label{tab:eda}
+\end{table}
+
+\textbf{Imbalance.} 17,014 real and 866 fraudulent ads. A majority-class model reaches 95.2\%
+accuracy and catches no fraud, which is why accuracy is not reported as a result. Resampling
+(SMOTE\textsuperscript{\cite{chawla2002}} or undersampling) was not used: weighting the loss gives the
+same push towards the minority class without inventing rows, and the threshold chosen on
+validation sets the final trade-off between precision and recall.
+
+\textbf{Duplicates.} 281 rows are exact copies of another row apart from \texttt{job\_id}; none of
+the duplicate blocks has conflicting labels. Beyond exact copies, 4,552 rows share their
+description with at least one other row, and the largest such group holds 380 ads. If copies of one template land in both training and test rows, the test score
+rewards memorising the template, so near-copies must stay on one side of every split.
+
+\textbf{Cleaning.} Dropping exact duplicates leaves 17,599 ads, 856 of them fraudulent, in 14,592
+description groups. A group is the hash of the normalised description text.
+
+\textbf{Missing values and flags.} Figure~\ref{fig:flags} compares how often each engineered flag
+fires in real and fraudulent ads (all exploration statistics are computed on the 17,880 raw
+ads, as in notebook \texttt{01}). A missing company profile is the clearest signal (67.8\% of
+fraudulent ads against 16.0\% of real ones), followed by a missing logo, money words (\emph{earn},
+\emph{per week}, \emph{no experience}, \emph{work from home}) and contact details in the text.
+Missingness itself carries information, so imputing it away would delete signal.
+
+\begin{figure}[tb]
+\centering
+\includegraphics[width=0.78\linewidth]{eda_flags.pdf}
+\caption{Share of ads where each flag is set, real versus fraudulent (17,880 raw ads).}
+\label{fig:flags}
+\end{figure}
+
+\textbf{Categorical metadata.} Fraud rates differ by group. Part-time ads are fraudulent at
+9.3\% against 4.2\% for full-time ads. Among countries with at least 100 ads, Australia reaches
+18.7\% and the United States 6.9\%, while Greece (940 ads), Germany, Belgium, the Netherlands,
+Ireland and New Zealand have no fraudulent ad at all.
+
+\begin{readingnote}[Before reading the results: country is partly a collection artefact]
+No fraud among 940 Greek ads is more likely a property of how EMSCAD was collected than of the
+Greek job market. A model that learns ``Greek, so real'' scores well on EMSCAD and would not
+transfer to another job board. The country feature stays in the model, because the task is
+EMSCAD, and Section~\ref{explain} shows how much the linear model relies on it.
+\end{readingnote}
+
+\textbf{Splits.} \texttt{StratifiedGroupKFold} on the description group gives a 60/20/20
+train/validation/test split that keeps the fraud rate (10,559 / 3,520 / 3,520 ads with 514 / 171 /
+171 frauds). We repeat this for five split seeds and save the row indices with a fingerprint of the
+cleaned data, so every notebook and every machine (the laptop for classical models, the GPU server
+for deep ones) uses exactly the same rows. A check confirms that no description group appears in
+two splits for any seed.

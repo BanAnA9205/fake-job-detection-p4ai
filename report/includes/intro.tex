@@ -1,0 +1,45 @@
+\section{Introduction}
+\label{intro}
+
+\textbf{Problem.} Online recruitment fraud is the posting of fake job advertisements, usually to
+collect money or personal data from applicants. A job board that hosts such ads harms the people
+who answer them and loses the trust of real employers, so it needs a filter that ranks incoming
+ads by how likely they are to be fake and sends the top of that ranking to a human
+moderator\textsuperscript{\cite{vidros2017}}.
+
+\textbf{Dataset.} We use EMSCAD, the Employment Scam Aegean Dataset\textsuperscript{\cite{vidros2017}}:
+17,880 job ads, each labelled real or fraudulent by hand. Only 866 ads
+(4.84\%) are fraudulent. Each ad has free-text fields (title, company profile, description,
+requirements, benefits), categorical metadata (employment type, industry, function, location,
+required experience and education) and three binary flags (telecommuting, company logo,
+screening questions).
+
+\textbf{Why it is not a solved benchmark.} Published results on EMSCAD range from 91\% to 99.9\%
+accuracy, but they use different splits, metrics and resampling schemes, and at least one was
+measured on a resampled test set\textsuperscript{\cite{taneja2025,amaar2022}}. With 4.84\% positives,
+a model that calls every ad real already scores 95.2\% accuracy, so accuracy says almost nothing,
+and a single random split says nothing about how much a result would move on another split.
+
+\textbf{Goal.} Compare classical text models, pretrained transformers and label-free detectors on
+EMSCAD under one protocol that does not leak, report the spread over several splits, and explain
+what the models rely on.
+
+\textbf{Contribution.}
+\begin{enumerate}[nosep]
+  \item One evaluation protocol for every model: duplicate-aware grouped splits, five split seeds,
+        PR-AUC as the headline metric, a decision threshold chosen on validation, and a test split
+        scored exactly once per model and seed.
+  \item A lineup that spans the course: a dummy floor; logistic regression on TF-IDF and on BM25;
+        a decision tree; an MLP; Complement Naive Bayes; a one-class SVM; frozen sentence embeddings;
+        a fine-tuned DistilBERT; and a zero-shot instruction-tuned language model.
+  \item A stack of DistilBERT and BM25 logistic regression that beats every single model on all
+        five split seeds (test PR-AUC 0.878).
+  \item Explanations at two levels: global coefficients for the linear model and per-ad Integrated
+        Gradients for DistilBERT, plus an error analysis of what each model misses.
+\end{enumerate}
+
+\textbf{Code.} Four notebooks run the project in order: \texttt{01} EDA and preprocessing,
+\texttt{02} classical models, \texttt{03} deep models (GPU server only), \texttt{04} analysis. Shared
+logic lives in \texttt{code/modules/} and is covered by unit tests. Every number in this report is
+read from the result files the notebooks save; \texttt{report/make\_figures.py} builds the
+figures and tables from them.
