@@ -9,23 +9,27 @@
 \graphicspath{{img/}}
 \pagestyle{fancy}
 \renewcommand{\headrulewidth}{0.4pt}
-\setlength{\headheight}{30pt}
+\setlength{\headheight}{28pt}
 \renewcommand{\footrulewidth}{0.4pt}
 
 \lhead{
-    \begin{tabular}{@{}c@{\hspace{1.2em}}l@{}}
-    \raisebox{-0.45\height}{\includegraphics[height=0.9cm]{logo_alt.png}} &
-    \begin{tabular}{@{}l@{}}\small University of Technology, Ho Chi Minh City \\
-    \small Faculty of Computer Science and Engineering\end{tabular}
-    \end{tabular}
-}
+    \begin{tabular}{rl}
+        \begin{picture}(25pt,15pt)
+            \put(0,-7pt){\includegraphics[width=20pt]{logo_alt.png}}
+        \end{picture}
+        \footnotesize
+        \begin{tabular}{l}
+            Ho Chi Minh city University of Technology \\
+            Faculty of Computer Science and Engineering
+        \end{tabular}
+    \end{tabular}}
 
 \rhead{}
 
 \cfoot{}
 
 \lfoot{
-    \small P4AI-DS -- Group 7 -- Academic year 2026--2027
+    \small Programming for AI and Data Science Report
 }
 
 \rfoot{\small page \thepage\ of \begin{NoHyper}\pageref{LastPage}\end{NoHyper}}

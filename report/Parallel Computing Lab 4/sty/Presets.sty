@@ -1,0 +1,113 @@
+% For codes
+\lstdefinestyle{Cpp}{
+    language=C++,                    % Specifies the language
+    basicstyle=\ttfamily\footnotesize, % Font size and type
+    keywordstyle=\color{blue}\bfseries, % Keywords in bold blue
+    commentstyle=\color{green!50!black}\itshape, % Comments in italic green
+    stringstyle=\color{red},         % Strings in red
+    numberstyle=\tiny\color{gray},   % Line numbers style
+    numbers=left,                    % Line numbers on the left
+    stepnumber=1,                    % Numbers every line
+    numbersep=10pt,                  % Space between line numbers and code
+    backgroundcolor=\color{pink!10}, % Light gray background
+    frame=single,                    % Adds a frame around the code
+    tabsize=4,                       % Sets tab size
+    captionpos=b,                    % Caption below the listing
+    breaklines=true,                 % Line breaking
+    %breakindent=0pt,                 % No indent for broken lines
+    breakatwhitespace=false,         % Only break at whitespace if needed
+    showspaces=false,                % Don't show spaces
+    showtabs=false,                  % Don't show tabs
+    showstringspaces=false,          % Don't mark spaces in strings
+    %deletekeywords={not},            % Remove 'not' from highlighted keywords
+    morekeywords={nullptr, size_t, uint32_t, int32_t, int64_t}, % Custom keywords
+}
+
+\lstdefinestyle{Python}{frame=tb,
+  numbers=left,
+  stepnumber=1,
+  language=Python,
+  aboveskip=3mm,
+  belowskip=3mm,
+  showstringspaces=false,
+  columns=flexible,
+  basicstyle={\small\ttfamily},
+  numberstyle=\tiny\color{DimGray},
+  keywordstyle=\color{blue},
+  commentstyle=\color{DarkGreen},
+  stringstyle=\color{FireBrick},
+  breaklines=true,
+  breakatwhitespace=true,
+  tabsize=3
+}
+
+\lstdefinestyle{Matlab}{language=Matlab,%
+    %basicstyle=\color{red},
+    breaklines=true,%
+    morekeywords={matlab2tikz},
+    keywordstyle=\color{blue},%
+    morekeywords=[2]{1}, keywordstyle=[2]{\color{black}},
+    identifierstyle=\color{black},%
+    stringstyle=\color{violet},
+    commentstyle=\color{Green},%
+    showstringspaces=false,%without this there will be a symbol in the places where there is a space
+    numbers=left,%
+    numberstyle={\tiny \color{black}},% size of the numbers
+    numbersep=9pt, % this defines how far the numbers are from the text
+    emph=[1]{for,end,break},emphstyle=[1]\color{red}, %some words to emphasise
+    %emph=[2]{word1,word2}, emphstyle=[2]{style},
+}
+
+\makeatletter
+
+\pretocmd{\NAT@citex}{%
+  \let\NAT@hyper@\NAT@hyper@citex
+  \def\NAT@postnote{#2}%
+  \setcounter{NAT@total@cites}{0}%
+  \setcounter{NAT@count@cites}{0}%
+  \forcsvlist{\stepcounter{NAT@total@cites}\@gobble}{#3}}{}{}
+\newcounter{NAT@total@cites}
+\newcounter{NAT@count@cites}
+\def\NAT@postnote{}
+
+% include postnote and \citet closing bracket in hyperlink
+\def\NAT@hyper@citex#1{%
+  \stepcounter{NAT@count@cites}%
+  \hyper@natlinkstart{\@citeb\@extra@b@citeb}#1%
+  \ifnumequal{\value{NAT@count@cites}}{\value{NAT@total@cites}}
+    {\ifNAT@swa\else\if*\NAT@postnote*\else%
+     \NAT@cmt\NAT@postnote\global\def\NAT@postnote{}\fi\fi}{}%
+  \ifNAT@swa\else\if\relax\NAT@date\relax
+  \else\NAT@@close\global\let\NAT@nm\@empty\fi\fi% avoid compact citations
+  \hyper@natlinkend}
+\renewcommand\hyper@natlinkbreak[2]{#1}
+
+% avoid extraneous postnotes, closing brackets
+\patchcmd{\NAT@citex}
+  {\ifNAT@swa\else\if*#2*\else\NAT@cmt#2\fi
+   \if\relax\NAT@date\relax\else\NAT@@close\fi\fi}{}{}{}
+\patchcmd{\NAT@citex}
+  {\if\relax\NAT@date\relax\NAT@def@citea\else\NAT@def@citea@close\fi}
+  {\if\relax\NAT@date\relax\NAT@def@citea\else\NAT@def@citea@space\fi}{}{}
+
+\makeatother
+
+\lstset{frame=tb,
+  numbers=left,
+  stepnumber=1,
+  language=Python,
+  aboveskip=3mm,
+  belowskip=3mm,
+  showstringspaces=false,
+  columns=flexible,
+  basicstyle={\small\ttfamily},
+  numberstyle=\tiny\color{DimGray},
+  keywordstyle=\color{blue},
+  commentstyle=\color{DarkGreen},
+  stringstyle=\color{FireBrick},
+  breaklines=true,
+  breakatwhitespace=true,
+  tabsize=3
+}
+
+\endinput

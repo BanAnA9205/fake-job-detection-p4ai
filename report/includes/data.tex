@@ -1,8 +1,72 @@
-\section{Data exploration and the decisions it drives}
+\section{Data and exploratory analysis}
 \label{data}
 
-Every exploration step in notebook \texttt{01} answers a question that changes a later choice.
-Table~\ref{tab:eda} lists what we found and what we did about it; the chunks below give the numbers.
+Before training any model we explored the data in notebook \texttt{01}. Each step of the
+exploration answers a question whose answer changes a later design choice; this section follows
+those questions in order and closes with the list of decisions they lead to. All statistics in this
+section are computed on the 17,880 raw ads.
+
+\subsection{Dataset overview}
+
+Each EMSCAD ad combines three kinds of fields. The free-text fields are the title, company
+profile, description, requirements and benefits. The categorical metadata describe the
+employment type, industry, function, location, and required experience and education. Three
+binary flags record whether the job allows telecommuting, whether the ad has a company logo, and
+whether it asks screening questions. The target column \texttt{fraudulent} marks 866 ads as fake. The dataset has already replaced real
+URLs, emails and phone numbers by hashed placeholders such as \texttt{\#URL\_...\#}, so any feature
+about contact details has to look for those placeholders.
+
+\subsection{Class imbalance}
+
+There are 17,014 real ads and 866 fraudulent ones, a fraud rate of 4.84\%. At this ratio accuracy
+is useless as a measure: the majority-class model reaches 95.2\% and catches no fraud. The
+imbalance therefore decides the metric (PR-AUC, Section~\ref{protocol}) and how the threshold is
+set. It also raises the question of resampling. We chose not to resample, because weighting the
+loss gives the same push towards the minority class without inventing synthetic rows, and the
+threshold chosen on validation sets the final balance between precision and recall.
+
+\subsection{Duplicates and near-duplicates}
+
+The next question is whether the same ad appears more than once. 281 rows are exact copies of
+another row apart from \texttt{job\_id}, and none of these copies has a conflicting label. The
+problem is larger than exact copies: 4,552 rows share their description text with at least one
+other row, and the largest such group holds 380 ads. If two ads with the same description end up
+in the training and the test rows, the test score rewards remembering that text instead of
+recognising fraud. We therefore drop the exact copies and, more importantly, split the data by
+description group rather than by row (Section~\ref{protocol}).
+
+\subsection{Missing values and engineered flags}
+
+Missing fields turn out to be a signal rather than noise. Figure~\ref{fig:flags} compares how
+often each engineered flag is set in real and fraudulent ads. A missing company profile is the
+clearest difference: it occurs in 67.8\% of fraudulent ads against 16.0\% of real ones. Fraudulent
+ads also have a company logo far less often, and more often contain money words (\emph{earn},
+\emph{per week}, \emph{no experience}, \emph{work from home}) and contact details in the text.
+Imputing the missing values would erase this signal, so we keep one missing-value flag per field.
+
+\begin{figure}[tb]
+\centering
+\includegraphics[width=0.78\linewidth]{eda_flags.pdf}
+\caption{Share of ads in which each flag is set, real versus fraudulent (17,880 raw ads).}
+\label{fig:flags}
+\end{figure}
+
+\subsection{Categorical metadata and a collection artefact}
+
+Fraud rates also differ between groups of the metadata. Part-time ads are fraudulent at 9.3\%,
+against 4.2\% for full-time ads. Location shows the strongest contrast: among countries with at
+least 100 ads, Australia reaches 18.7\% and the United States 6.9\%, while Greece (940 ads),
+Germany, Belgium, the Netherlands, Ireland and New Zealand have no fraudulent ad at all.
+
+These zeros are more likely a property of how EMSCAD was collected than of the Greek or German
+job markets. A model that learns ``Greek, so real'' scores well on EMSCAD but would not transfer to
+another job board. We keep the country feature, because the task is defined on EMSCAD, and check
+in Section~\ref{explain} how much the models rely on it.
+
+\subsection{From findings to design decisions}
+
+Table~\ref{tab:eda} collects what the exploration found and the decision each finding drives.
+Section~\ref{protocol} implements these decisions.
 
 \begin{table}[tb]
 \centering
@@ -11,67 +75,18 @@ Table~\ref{tab:eda} lists what we found and what we did about it; the chunks bel
 \toprule
 \textbf{Finding} & \textbf{Decision} \\
 \midrule
-4.84\% of ads are fraudulent. & PR-AUC as the headline metric; decision threshold chosen on
-validation; class weights instead of resampling. \\
-281 exact duplicate rows; 4,552 rows share their description with another row. & Drop exact
-duplicates, then split by description group so that no description sits in two splits. \\
-Missing fields are much more common in fraudulent ads. & Keep a missing-value flag per field
-instead of imputing the gap away. \\
-The text fields hold the strongest signal. & Join the five text fields into one text column and
-keep it at the centre of every model. \\
-Real URLs, emails and phone numbers are already replaced by placeholders such as
-\texttt{\#URL\_...\#}. & Contact flags look for the placeholders, not for real addresses. \\
-Some countries have 0\% fraud over hundreds of ads. & Keep country as a feature, but read
-the results with this collection artefact in mind (Section~\ref{discussion}). \\
+4.84\% of ads are fraudulent. & PR-AUC as the main metric; threshold chosen on validation; class
+weights instead of resampling. \\
+281 exact duplicates; 4,552 rows share a description. & Drop exact duplicates; split by description
+group. \\
+Missing fields are far more common in fraudulent ads. & Keep a missing-value flag per field. \\
+The text fields hold the strongest signal. & Join the five text fields into one text column at the
+centre of every model. \\
+Contact details are hashed placeholders. & Contact flags look for the placeholders. \\
+Some countries have no fraud over hundreds of ads. & Keep country, but check how much the models
+rely on it. \\
 \bottomrule
 \end{tabular}
-\caption{Exploration findings and the decision each one drives.}
+\caption{Exploration findings and the design decision each one drives.}
 \label{tab:eda}
 \end{table}
-
-\textbf{Imbalance.} 17,014 real and 866 fraudulent ads. A majority-class model reaches 95.2\%
-accuracy and catches no fraud, which is why accuracy is not reported as a result. Resampling
-(SMOTE\textsuperscript{\cite{chawla2002}} or undersampling) was not used: weighting the loss gives the
-same push towards the minority class without inventing rows, and the threshold chosen on
-validation sets the final trade-off between precision and recall.
-
-\textbf{Duplicates.} 281 rows are exact copies of another row apart from \texttt{job\_id}; none of
-the duplicate blocks has conflicting labels. Beyond exact copies, 4,552 rows share their
-description with at least one other row, and the largest such group holds 380 ads. If copies of one template land in both training and test rows, the test score
-rewards memorising the template, so near-copies must stay on one side of every split.
-
-\textbf{Cleaning.} Dropping exact duplicates leaves 17,599 ads, 856 of them fraudulent, in 14,592
-description groups. A group is the hash of the normalised description text.
-
-\textbf{Missing values and flags.} Figure~\ref{fig:flags} compares how often each engineered flag
-fires in real and fraudulent ads (all exploration statistics are computed on the 17,880 raw
-ads, as in notebook \texttt{01}). A missing company profile is the clearest signal (67.8\% of
-fraudulent ads against 16.0\% of real ones), followed by a missing logo, money words (\emph{earn},
-\emph{per week}, \emph{no experience}, \emph{work from home}) and contact details in the text.
-Missingness itself carries information, so imputing it away would delete signal.
-
-\begin{figure}[tb]
-\centering
-\includegraphics[width=0.78\linewidth]{eda_flags.pdf}
-\caption{Share of ads where each flag is set, real versus fraudulent (17,880 raw ads).}
-\label{fig:flags}
-\end{figure}
-
-\textbf{Categorical metadata.} Fraud rates differ by group. Part-time ads are fraudulent at
-9.3\% against 4.2\% for full-time ads. Among countries with at least 100 ads, Australia reaches
-18.7\% and the United States 6.9\%, while Greece (940 ads), Germany, Belgium, the Netherlands,
-Ireland and New Zealand have no fraudulent ad at all.
-
-\begin{readingnote}[Before reading the results: country is partly a collection artefact]
-No fraud among 940 Greek ads is more likely a property of how EMSCAD was collected than of the
-Greek job market. A model that learns ``Greek, so real'' scores well on EMSCAD and would not
-transfer to another job board. The country feature stays in the model, because the task is
-EMSCAD, and Section~\ref{explain} shows how much the linear model relies on it.
-\end{readingnote}
-
-\textbf{Splits.} \texttt{StratifiedGroupKFold} on the description group gives a 60/20/20
-train/validation/test split that keeps the fraud rate (10,559 / 3,520 / 3,520 ads with 514 / 171 /
-171 frauds). We repeat this for five split seeds and save the row indices with a fingerprint of the
-cleaned data, so every notebook and every machine (the laptop for classical models, the GPU server
-for deep ones) uses exactly the same rows. A check confirms that no description group appears in
-two splits for any seed.

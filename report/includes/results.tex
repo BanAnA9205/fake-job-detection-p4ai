@@ -1,12 +1,16 @@
 \section{Results}
 \label{results}
 
-\begin{readingnote}[Before reading Table~\ref{tab:headline}]
-PR-AUC and ROC-AUC rank ads without a threshold. F1, precision and recall are measured at each
+This section first gives the overall picture, then explains why models have to be compared
+split by split, and then goes through the classical models, the deep models, the stack and the
+label-free models in turn.
+
+\subsection{Overall comparison}
+
+Table~\ref{tab:headline} gives the test metrics of every model as the mean and standard deviation
+over the five split seeds, and Figure~\ref{fig:seeds} shows each seed separately. PR-AUC and
+ROC-AUC measure the ranking and need no threshold. F1, precision and recall are measured at each
 model's own validation-chosen threshold, so they depend on that choice as well as on the model.
-Each cell is the mean $\pm$ standard deviation over the five split seeds; the standard deviation
-measures how much a score moves with the split, not the error of a single run.
-\end{readingnote}
 
 \begin{table}[tb]
 \centering
@@ -19,9 +23,10 @@ measures how much a score moves with the split, not the error of a single run.
 \tabinput{includes/tab_headline}
 \bottomrule
 \end{tabular}
-\caption{Test metrics over five split seeds, sorted by PR-AUC. The last column is the wall-clock
-time per seed (tuning included; classical models on a laptop CPU, deep models on a GPU). The
-zero-shot time is for scoring all 17,599 ads once; the stack takes under a second.}
+\caption{Test metrics over five split seeds (mean $\pm$ standard deviation), sorted by PR-AUC. The
+last column is the wall-clock time per seed, tuning included (classical models on a laptop CPU,
+deep models on a GPU). The zero-shot time is for scoring all 17,599 ads once; the stack takes
+under a second.}
 \label{tab:headline}
 \end{table}
 
@@ -29,21 +34,25 @@ zero-shot time is for scoring all 17,599 ads once; the stack takes under a secon
 \centering
 \includegraphics[width=0.85\linewidth]{test_pr_auc_seeds.pdf}
 \caption{Test PR-AUC of every model on every split seed. Dots are seeds, the black bar is the
-mean, the dashed line the fraud rate.}
+mean and the dashed line is the fraud rate.}
 \label{fig:seeds}
 \end{figure}
 
-\textbf{Floor.} The majority dummy scores 0.049, the fraud rate. Every supervised model clears it
-by a wide margin; the three label-free models (zero-shot language model, one-class SVM, dummy) do
-not.
+Three groups stand out. The supervised text models (the stack, the logistic regressions, the MLP,
+DistilBERT and Complement NB) reach 0.77 to 0.88. The frozen embeddings and the decision tree sit
+in the middle, at 0.52 and 0.40. The three models that never learn from fraud labels, namely the
+zero-shot language model, the one-class SVM and the dummy, stay at the 0.049 floor. The gap
+between ROC-AUC and PR-AUC also confirms the choice of metric: the decision tree has a respectable
+ROC-AUC of 0.843 but a PR-AUC of only 0.402.
 
-\textbf{Spread across splits.} The standard deviations (0.03 to 0.08) are as large as most gaps
-between the top models, and in Figure~\ref{fig:seeds} their dots overlap. Read unpaired, the top
-five models cannot be told apart.
+\subsection{Comparing models across splits}
 
-\textbf{Paired comparison.} Every model is evaluated on the same five splits, so the right test is
-the per-seed difference (Table~\ref{tab:paired}). A hard split is hard for every model, and the
-difference cancels that shared part of the noise.
+Within the top group, the standard deviations (0.03 to 0.08) are as large as most of the gaps
+between the means, and in Figure~\ref{fig:seeds} the dots of the top five models overlap. Read
+this way, the top models cannot be told apart. However, every model is evaluated on the same five
+splits, and a split that is hard for one model is hard for all of them. Comparing two models seed
+by seed cancels this shared difficulty, so Table~\ref{tab:paired} gives the per-seed differences
+for the comparisons that matter.
 
 \begin{table}[tb]
 \centering
@@ -59,27 +68,34 @@ difference cancels that shared part of the noise.
 \label{tab:paired}
 \end{table}
 
-\textbf{Stack.} The stack of DistilBERT and BM25 LR is the best model (0.878). It beats BM25 LR on
-all five seeds by +0.022 to +0.036, and DistilBERT on all five by +0.051 to +0.087. Its precision
-(0.902) is the highest of any model, at a recall similar to BM25 LR's. Measured per standard
-deviation of its input, BM25 LR's weight in the stacker is 3 to 6 times DistilBERT's on every seed:
-the stack is mostly BM25 LR, corrected by DistilBERT.
+\subsection{Classical models}
 
-\textbf{BM25 versus TF-IDF.} BM25 LR beats TF-IDF LR on all five seeds (mean +0.026), although the
-unpaired means differ by less than one standard deviation. Saturating repeated words and
-discounting long ads helps a little but consistently.
+The paired view separates models that the unpaired view could not. BM25 LR beats TF-IDF LR on all
+five seeds (mean +0.026), although their means differ by less than one standard deviation, so
+saturating repeated words and discounting long ads helps a little but consistently. The MLP is
+level with BM25 LR (mean difference $-$0.001, 3 wins of 5) at about six times the training time,
+so its extra capacity buys nothing here.
 
-\textbf{DistilBERT alone.} Fine-tuned DistilBERT reaches 0.816: below BM25 LR on all five seeds
-(mean $-$0.032) and level with TF-IDF LR (it wins on one seed of five). It also costs a GPU.
-
-\textbf{MLP and Complement NB.} The MLP equals BM25 LR (mean difference $-$0.001, 3 wins of 5) at
-about six times the time. Complement NB loses to TF-IDF LR on 4 of 5 seeds (mean $-$0.048) but has
-the smallest spread of any supervised model (std 0.029). It is also the most sensitive to its one
+Complement NB loses to TF-IDF LR on 4 of 5 seeds (mean $-$0.048) but has the smallest spread of
+any supervised model (standard deviation 0.029). It is also the most sensitive to its single
 hyper-parameter: on the seed-0 validation rows it scores 0.427 untuned ($\alpha = 1$) and 0.867
-tuned ($\alpha = 0.01$).
+tuned ($\alpha = 0.01$), which illustrates why every model is tuned. The decision tree reaches only
+0.402 and has the largest gap between training and test PR-AUC (0.24): a single tree splits on a
+handful of words and overfits them.
 
-\textbf{Decision tree.} 0.402, far below the linear models, with the largest gap between training
-and test PR-AUC (0.24). A single tree splits on a handful of words and overfits them.
+\subsection{Deep models}
+
+Fine-tuned DistilBERT reaches 0.816. It is below BM25 LR on all five seeds (mean $-$0.032) and
+level with TF-IDF LR (it wins on one seed of five), while needing a GPU. Its training curves
+(Figure~\ref{fig:curves}, right) show that more training would not change this: validation PR-AUC
+jumps from about 0.6 after the first epoch to about 0.8 after the second and is flat from the
+third epoch on, with the best epoch at 3, 4 or 5 depending on the seed. The chosen thresholds vary
+from 0.25 to 0.94 across seeds, because the fine-tuned model pushes most scores close to 0 or 1,
+so a small shift in the scores moves the threshold a lot.
+
+The frozen MiniLM embeddings reach only 0.524. A single 384-dimensional summary of what an ad
+means loses the specific words, such as pay amounts or ``data entry'', that separate fraud in this
+dataset. Fine-tuning the whole encoder recovers them (0.816), at a much higher cost.
 
 \begin{figure}[tb]
 \centering
@@ -92,35 +108,30 @@ and test PR-AUC (0.24). A single tree splits on a handful of words and overfits 
 \includegraphics[width=\linewidth]{bert_epochs.pdf}
 \end{minipage}
 \caption{Left: test precision-recall curves of seed 0. Right: DistilBERT validation PR-AUC per
-epoch, one thin line per seed, the thick line is the mean.}
+epoch, one thin line per seed and the mean as a thick line.}
 \label{fig:curves}
 \end{figure}
 
-\textbf{Precision-recall curves.} In Figure~\ref{fig:curves} (left) the stack lies on or above both
-of its inputs over most of the recall range. The three strong curves keep precision above 0.8 up
-to a recall of about 0.6 and then fall; the frauds beyond that point are the hard ones
-(Section~\ref{explain}).
+\subsection{Stacking}
 
-\textbf{DistilBERT training.} Validation PR-AUC jumps from about 0.6 after epoch 1 to about 0.8
-after epoch 2 and is flat from epoch 3 on (Figure~\ref{fig:curves}, right); the best epoch is 3,
-4 or 5 depending on the seed. More epochs would not help. The chosen thresholds range from 0.25 to
-0.94 across seeds, because the fine-tuned model pushes most scores close to 0 or 1, so a small
-shift in scores moves the threshold a lot.
+Since DistilBERT on its own is weaker than BM25 LR, the question is whether it adds anything when
+the two are combined. It does: the stack reaches 0.878, the best result of the project. It beats
+BM25 LR on all five seeds (+0.022 to +0.036) and DistilBERT on all five (+0.051 to +0.087), and
+its precision of 0.902 is the highest of any model, at a recall similar to BM25 LR's. In the
+precision-recall curves (Figure~\ref{fig:curves}, left) the stack lies on or above both of its
+inputs over most of the recall range. Measured per standard deviation of its input, BM25 LR's
+weight in the stacker is 3 to 6 times DistilBERT's on every seed, so the stack is mostly BM25 LR,
+corrected by DistilBERT where the two disagree.
 
-\textbf{Frozen embeddings.} MiniLM embeddings with LR reach 0.524, between the tree and the text
-models. A single 384-dimensional summary of what an ad means loses the specific words (pay
-amounts, ``data entry'') that separate fraud in this dataset; fine-tuning the whole encoder
-recovers them (0.816).
+\subsection{Label-free models}
 
-\textbf{Label-free models.} Neither detector that works without fraud labels beats the dummy by a
-useful margin.
-\begin{itemize}[nosep]
-  \item \textbf{One-class SVM:} 0.057, ROC-AUC 0.47. On the same SVD features, a supervised
-        logistic regression reaches a seed-0 validation PR-AUC of 0.685 against the one-class SVM's
-        0.066, so the information is in the features and the anomaly assumption is what fails:
-        fraudulent ads are not unusual ads, many of them are generic template postings.
-  \item \textbf{Zero-shot Qwen2.5-1.5B:} 0.078, ROC-AUC 0.49. It answers ``fraudulent'' for 98\% of
-        the seed-0 test ads, and its bf16 scores take only 47 distinct values over 3,520 ads. A general
-        model asked a general question does not know what fraud looks like in EMSCAD; the labels are
-        what make the supervised models work.
-\end{itemize}
+Neither label-free detector does much better than the dummy. The one-class SVM scores 0.057 with a
+ROC-AUC of 0.47, which is chance level. To find out whether the features or the anomaly assumption
+is to blame, we trained a supervised logistic regression on the same SVD features: it reaches a
+seed-0 validation PR-AUC of 0.685, against the one-class SVM's 0.066. The information is therefore
+in the features, and what fails is the assumption that fraudulent ads are unusual.
+
+The zero-shot Qwen2.5-1.5B model scores 0.078, with a ROC-AUC of 0.49. It answers ``fraudulent''
+for 98\% of the seed-0 test ads, and its scores, computed in bf16, take only 47 distinct values
+over 3,520 ads, so its ranking is both biased and coarse. Section~\ref{discussion} returns to why
+both detectors fail.

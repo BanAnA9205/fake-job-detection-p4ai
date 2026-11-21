@@ -27,10 +27,8 @@
 
 % Links, citations, references
 \usepackage{xurl}           % also loads url; breaks long URLs at more points
-\usepackage[backend=biber, style=numeric]{biblatex}
-\addbibresource{refs.bib}
-\renewcommand*{\bibfont}{\normalfont}
-\usepackage{csquotes}       % recommended by biblatex whenever babel is loaded
+\usepackage[numbers,square,sort&compress]{natbib} % numeric [1] citations, built with BibTeX
+\usepackage{csquotes}       % quotation marks
 
 % Figures, tables, code
 \usepackage{graphicx}
@@ -44,7 +42,7 @@
 \hypersetup{
   colorlinks   = true,     % Colours links instead of ugly boxes
   urlcolor     = blue,     % Colour for external hyperlinks
-  linkcolor    = black,    % Colour of internal links
+  linkcolor    = blue,     % Colour of internal links (contents, section references)
   citecolor    = FireBrick % Colour of citations
 }
 

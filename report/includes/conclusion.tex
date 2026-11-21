@@ -1,26 +1,27 @@
 \section{Conclusion}
 \label{conclusion}
 
-\textbf{Answer.} On EMSCAD, under one protocol with grouped splits and five seeds, a logistic
-regression on BM25-weighted words is the best single model (test PR-AUC 0.847), and fine-tuned
-DistilBERT does not beat it (0.816). Stacking the two gives the best result, 0.878, and the gain over
-BM25 LR is positive on all five seeds. Detectors that never see a fraud label (one-class SVM,
-zero-shot Qwen2.5-1.5B) stay near the 0.049 floor.
+This project compared classical text models, pretrained transformers and label-free detectors for
+fake job posting detection on EMSCAD, under one protocol with grouped splits, five split seeds and
+a test split scored only once. Under this protocol, a logistic regression on BM25-weighted words is
+the best single model, with a test PR-AUC of 0.847, and a fine-tuned DistilBERT does not beat it
+(0.816). Because the two make different mistakes, a stack of the two reaches 0.878 and improves on
+BM25 LR on all five seeds. Detectors that never see a fraud label stay near the 0.049 floor.
 
-\textbf{Lessons.}
-\begin{enumerate}[nosep]
-  \item Split by description group, not by row: EMSCAD repeats descriptions, and a row split would
-        reward memorising them.
-  \item Report PR-AUC and the spread over several splits; compare models paired by split. The
-        unpaired error bars hide consistent gains such as BM25 over TF-IDF (5 of 5 seeds).
-  \item Start from a tuned linear baseline. It was the strongest single model here at a fraction of
-        the cost of the alternatives.
-  \item Two models with similar scores but different mistakes are worth combining; a two-input
-        stacker on validation scores is cheap and gave the best result of the project.
-  \item Read the explanations for artefacts: the strongest features include two countries, one
-        employer name and one URL hash, which say more about the dataset than about fraud.
-\end{enumerate}
+Several lessons carry beyond this dataset. The exploration showed that EMSCAD repeats descriptions,
+so the data has to be split by description group rather than by row, or the test score rewards
+memorisation. The imbalance makes accuracy meaningless, so models should be compared by PR-AUC over
+several splits, and compared split by split: the error bars of single models hide consistent
+gains, such as BM25 over TF-IDF on all five seeds. A tuned linear baseline deserves to be the
+starting point, since here it was the strongest single model at a fraction of the cost of the
+alternatives. When two models score similarly but make different mistakes, a cheap two-input
+stacker on validation scores can combine them, and here it gave the best result of the project.
+Finally, explanations are worth reading for what they reveal about the data: the strongest
+features include two countries, one employer name and one URL hash, which say more about how
+EMSCAD was collected than about fraud.
 
-\textbf{Future work.} Check the country and template artefacts by training without the country
-feature and with splits grouped by poster rather than by description; try the stack with the
-MLP as a third input; and test a model trained on EMSCAD on job ads from a different source.
+Three directions follow naturally. Training without the country feature, and with splits grouped
+by poster rather than by description, would measure how much of the performance rests on these
+artefacts. Adding the MLP as a third input to the stack would test whether further diversity
+helps. Most importantly, evaluating a model trained on EMSCAD on job ads from another source would
+show how much of what it learned is fraud and how much is EMSCAD.

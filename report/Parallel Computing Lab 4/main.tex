@@ -1,0 +1,190 @@
+\documentclass[12pt]{article}
+\usepackage{sty/Packages}
+\usepackage{sty/Presets}
+\usepackage{sty/Commands}
+\usepackage{sty/Misc}
+
+\begin{document}
+
+\input{includes/titlepage.tex}
+\tableofcontents
+\newpage
+
+% --- SECTION 1: INTRODUCTION ---
+\section{Introduction}
+
+This lab focuses on the implementation of a distributed parallel simulation using the \textbf{Message Passing Interface (MPI)}. Building upon the previous exercises (Heat Diffusion, Radioactive Contamination, and Shock Wave propagation), the goal is to scale the simulation across multiple physical nodes in a distributed memory environment.
+
+The primary objective is to implement two distinct communication strategies: \textbf{Synchronous} and \textbf{Asynchronous}, and analyze their performance impact. Specifically, we aim to demonstrate "Latency Hiding" by overlapping communication with computation to improve the overall runtime efficiency of the system.
+
+The simulation operates on a $4000 \times 4000$ grid over 100 time steps. The workload is distributed using a row-wise domain decomposition strategy, where each MPI process is responsible for a horizontal "slab" of the grid and maintains "halo" (ghost) rows to exchange boundary data with neighbors.
+
+% --- SECTION 2: IMPLEMENTATION STRATEGIES ---
+\section{Implementation Strategies}
+
+\subsection{Synchronous Implementation (Blocking)}
+The synchronous approach utilizes standard blocking communication. At the end of each time step, every process pauses its computation to exchange halo rows with its neighbors.
+
+\begin{itemize}
+    \item \textbf{Mechanism:} Uses \texttt{MPI\_Sendrecv} to perform point-to-point communication.
+    \item \textbf{Workflow:}
+    \begin{enumerate}
+        \item Compute all local rows (Interior and Boundaries).
+        \item \textbf{Block} and wait for data exchange (Send to/Recv from neighbors).
+        \item Proceed to the next iteration.
+    \end{enumerate}
+    \item \textbf{Disadvantage:} The CPU remains idle during the data transfer phase, leading to zero overlap between computation and communication.
+\end{itemize}
+
+\subsection{Asynchronous Implementation (Latency Hiding)}
+The asynchronous approach leverages non-blocking MPI primitives to overlap the communication overhead with useful computational work. This is the core difference compared to the synchronous version.
+
+\begin{itemize}
+    \item \textbf{Mechanism:} Uses \texttt{MPI\_Isend} and \texttt{MPI\_Irecv} combined with \texttt{MPI\_Waitall}.
+    \item \textbf{Latency Hiding Strategy:} To achieve true overlap, the computation kernel was split into two distinct phases:
+    \begin{enumerate}
+        \item \textbf{Phase A (Interior):} Rows that do not depend on neighbor data (Rows $2$ to $N-1$). These are safe to calculate immediately.
+        \item \textbf{Phase B (Boundaries):} Rows that depend on halo data (Row $1$ and Row $N$). These must wait for communication to complete.
+    \end{enumerate}
+    \item \textbf{Workflow:}
+    \begin{enumerate}
+        \item Initiate non-blocking transfers (\texttt{MPI\_Isend} / \texttt{MPI\_Irecv}).
+        \item \textbf{Compute Interior Rows} immediately. This computation happens \textit{while} the data is traveling over the network, effectively hiding the transfer latency.
+        \item Call \texttt{MPI\_Waitall} to synchronize and ensure halos have arrived.
+        \item Compute Boundary Rows.
+    \end{enumerate}
+\end{itemize}
+
+% --- SECTION 3: KEY CODE IMPLEMENTATION ---
+\section{Key Code Implementation}
+
+This section highlights the critical differences in the main simulation loop between the Synchronous and Asynchronous versions.
+
+\subsection{Synchronous Logic}
+In the synchronous version, the physics computation and halo exchange happen sequentially. The process must finish all math before it can start talking to neighbors.
+
+\begin{lstlisting}[style=Cpp, caption={Synchronous Halo Exchange using MPI\_Sendrecv}]
+// 1. Heat Diffusion
+compute_heat(my_rows, heat_curr, heat_next);
+
+// 2. Blocking Exchange (CPU waits here)
+exchange_halos(heat_next, my_rows, up_proc, down_proc);
+
+// 3. Swap Pointers
+std::swap(heat_curr, heat_next);
+\end{lstlisting}
+
+\subsection{Asynchronous Logic (Optimized)}
+In the optimized asynchronous version, the computation is split. The \texttt{compute\_heat\_interior} function processes the majority of the grid while the MPI requests are active in the background.
+
+\begin{lstlisting}[style=Cpp, caption={Asynchronous Latency Hiding Pattern}]
+// A. Start Communication (Returns immediately)
+start_exchange(heat_curr, my_rows, up_proc, down_proc, reqs); 
+
+// B. Compute INTERIOR (Independent of Halos)
+// [OVERLAP: CPU works here while Data moves over Network]
+compute_heat_interior(my_rows, heat_curr, heat_next);         
+
+// C. Wait for Halos (Synchronization Point)
+MPI_Waitall(4, reqs, MPI_STATUSES_IGNORE);                    
+
+// D. Compute BOUNDARIES (Now that we have valid halos)
+compute_heat_boundaries(my_rows, heat_curr, heat_next);       
+
+// E. Swap
+std::swap(heat_curr, heat_next);
+\end{lstlisting}
+
+The \texttt{start\_exchange} function utilizes non-blocking primitives:
+\begin{lstlisting}[style=Cpp, caption={Non-blocking MPI Calls}]
+void start_exchange(float* buf, size_t rows, int up, int down, MPI_Request* reqs) {
+    int tag = 0;
+    // Initiate Receives (Irecv)
+    MPI_Irecv(&buf[idx(0, 0)], paddedCsvSize, MPI_FLOAT, up, tag, MPI_COMM_WORLD, &reqs[0]);
+    MPI_Irecv(&buf[idx(pad_sz + rows, 0)], ..., down, tag, MPI_COMM_WORLD, &reqs[1]);
+
+    // Initiate Sends (Isend)
+    MPI_Isend(&buf[idx(pad_sz, 0)], paddedCsvSize, MPI_FLOAT, up, tag, MPI_COMM_WORLD, &reqs[2]);
+    MPI_Isend(&buf[idx(pad_sz + rows - 1, 0)], ..., down, tag, MPI_COMM_WORLD, &reqs[3]);
+}
+\end{lstlisting}
+
+% --- SECTION 4: EXPERIMENTAL SETUP ---
+\section{Experimental Setup}
+
+The experiments were conducted on a heterogeneous distributed cluster consisting of 2 physical nodes connected via a standard Local Area Network (LAN).
+
+\subsection{Hardware Configuration}
+The cluster is composed of two distinct machines:
+\begin{itemize}
+    \item \textbf{Node 1 (Master/Rank 0):}
+    \begin{itemize}
+        \item CPU: 6 Cores
+        \item RAM: 16 GB
+    \end{itemize}
+    \item \textbf{Node 2 (Worker):}
+    \begin{itemize}
+        \item CPU: 4 Cores
+        \item RAM: 4 GB
+    \end{itemize}
+\end{itemize}
+
+\subsection{Software Environment}
+\begin{itemize}
+    \item \textbf{Library:} Open MPI 5.0.8
+    \item \textbf{Compilation:} Both implementations were compiled with the \texttt{-O2} optimization flag and native architecture tuning. This flag was chosen to ensure a balanced ratio between computation and communication, as aggressive optimization (e.g., \texttt{-O3}) can reduce computation time so significantly that communication overhead dominates (Amdahl's Law), making overlap difficult to observe.
+    \begin{itemize}
+        \item \texttt{mpicxx -O2 -march=native main.cpp -o main}
+        \item \texttt{mpicxx -O2 -march=native main\_async.cpp -o main\_async}
+    \end{itemize}
+\end{itemize}
+
+% --- SECTION 5: RESULTS ---
+\section{Results}
+
+The simulation was executed with \textbf{4 MPI Processes} distributed across the two nodes described above. The total execution time was measured for 3 independent runs for both implementations.
+
+\begin{table}[H]
+    \centering
+    \caption{Runtime Performance Comparison (Seconds)}
+    \begin{tabular}{lcc}
+        \hline
+        \textbf{Run \#} & \textbf{Synchronous (Blocking)} & \textbf{Asynchronous (Optimized)} \\
+        \hline
+        1 & 2.32167 s & 1.60134 s \\
+        2 & 2.32432 s & 1.54456 s \\
+        3 & 2.30868 s & 1.57610 s \\
+        \hline
+        \textbf{Average} & \textbf{2.318 s} & \textbf{1.574 s} \\
+        \hline
+    \end{tabular}
+\end{table}
+
+% --- SECTION 6: ANALYSIS ---
+\section{Analysis and Discussion}
+
+\subsection{Performance Comparison}
+The Asynchronous implementation achieved an average runtime of \textbf{1.574 seconds}, compared to \textbf{2.318 seconds} for the Synchronous version.
+\begin{itemize}
+    \item \textbf{Speedup:} $2.318 / 1.574 \approx \mathbf{1.47x}$
+    \item \textbf{Improvement:} The asynchronous version is approximately \textbf{32\% faster}.
+\end{itemize}
+
+\subsection{Latency Hiding Effectiveness}
+The significant speedup confirms that the \textbf{Latency Hiding} strategy was highly effective in this distributed environment.
+\begin{itemize}
+    \item In the \textbf{Synchronous} model, the total time per iteration is largely additive: $T_{total} = T_{compute} + T_{comm}$. The network latency is fully exposed, as the CPU must idle while waiting for the network card to transmit halo data.
+    \item In the \textbf{Asynchronous} model, the CPU processed the "Interior" rows which constitute the vast majority of the grid, \textit{while} the MPI data was in flight. Since the time required to compute the interior ($T_{interior}$) exceeded the communication time ($T_{comm}$), the network cost was effectively completely hidden. The effective iteration time approached $T_{compute}$.
+\end{itemize}
+
+\subsection{Impact of Optimization Flags}
+The choice of the \texttt{-O2} flag played a critical role in these results. In preliminary tests using \texttt{-O3}, the compiler optimized the stencil computation loop so aggressively (using AVX vectorization) that $T_{compute}$ became negligible. When $T_{compute}$ is extremely small, it cannot effectively "cover" the cost of $T_{comm}$, leading to reduced scalability. By using \texttt{-O2}, we maintained a computation load sufficient to demonstrate the architectural benefits of the asynchronous design.
+
+% --- SECTION 7: CONCLUSION ---
+\section{Conclusion}
+
+This lab successfully demonstrated the deployment of a hybrid physics simulation on a distributed cluster. By refactoring the standard stencil algorithm to separate independent (interior) and dependent (boundary) data regions, we were able to utilize \texttt{MPI\_Isend} and \texttt{MPI\_Irecv} to effectively hide communication latency.
+
+The resulting \textbf{1.47x speedup} validates that overlapping communication with computation is a critical optimization technique for high-performance distributed computing, particularly in environments where network latency is a potential bottleneck.
+
+\end{document}
