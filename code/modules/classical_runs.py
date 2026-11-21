@@ -9,12 +9,14 @@ import os
 import time
 import warnings
 
+from sklearn.model_selection import ParameterGrid
+
 from modules import data_helper as dh
 from modules import eval_helper as ev
 from modules import models as md
 from modules import results_helper as rh
 
-ALL_MODELS = ["dummy_majority", "logreg", "logreg_bm25", "tree", "mlp", "cnb", "ocsvm"]
+ALL_MODELS = ["dummy_majority", "logreg", "logreg_bm25", "mlp", "cnb", "ocsvm"]
 
 
 def get_splits(df, seed, split_dir="splits"):
@@ -33,9 +35,12 @@ def fit_model(name, seed, train, y_train, n_iter, cv, n_jobs):
     if name.startswith("dummy"):
         return md.get_baselines(seed)[name].fit(train, y_train), {}, None
 
-    # Real models: random search with grouped CV on the training rows only.
-    pipe = md.get_models(seed)[name]
-    search = md.tune(pipe, md.PARAM_GRIDS[name], train, y_train, train["group"].to_numpy(),
+    # Real models: random search with grouped CV on the training rows only (the whole grid
+    # for the models in FULL_GRID).
+    pipe, grid = md.get_models(seed)[name], md.PARAM_GRIDS[name]
+    if name in md.FULL_GRID:
+        n_iter = len(ParameterGrid(grid))
+    search = md.tune(pipe, grid, train, y_train, train["group"].to_numpy(),
                      n_iter=n_iter, cv=cv, seed=seed, n_jobs=n_jobs)
     return search.best_estimator_, search.best_params_, float(search.best_score_)
 
@@ -65,11 +70,14 @@ def run_one(name, seed, parts, out_dir, n_iter, cv, n_jobs):
     test_m = ev.evaluate(y_test, s_test, thr)       # the test rows are scored once, here
     seconds = round(time.time() - start, 1)
 
+    search_desc = (f"the full grid of {len(ParameterGrid(md.PARAM_GRIDS[name]))} candidates"
+                   if name in md.FULL_GRID else f"{n_iter} random candidates")
+
     # Save the shared json + npz pair.
     rh.save_result(out_dir, name, "classical", seed, thr, val_m, test_m, y_val, s_val, y_test,
                    s_test, train_pr_auc=ev.evaluate(y_train, s_train, thr)["pr_auc"],
                    best_params=best_params, seconds=seconds,
-                   notes=f"tuned with {n_iter} random candidates, {cv}-fold grouped CV; "
+                   notes=f"tuned with {search_desc}, {cv}-fold grouped CV; "
                          f"cv PR-AUC {cv_score}; warnings: {warned or 'none'}")
 
     # Only validation is printed on purpose: test numbers stay in the saved files until the final report.

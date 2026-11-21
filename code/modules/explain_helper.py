@@ -1,8 +1,7 @@
-"""Explanation helpers: linear coefficients, tree importances and rules, error reading."""
+"""Explanation helpers: linear coefficients, error reading, Integrated Gradients for BERT."""
 
 import numpy as np
 import pandas as pd
-from sklearn.tree import export_text
 
 
 def top_linear_terms(pipe, k=20):
@@ -55,23 +54,6 @@ def show_errors(df, y_true, score, thr, k=10):
                 }
             )
     return pd.DataFrame(rows)
-
-
-def top_tree_features(pipe, k=20):
-    """The k features a fitted decision tree relies on most (impurity importance)."""
-    imp = pd.Series(pipe.named_steps["clf"].feature_importances_,
-                    index=pipe.named_steps["pre"].get_feature_names_out())
-
-    # Top k features by impurity importance.
-    top = imp.nlargest(k)
-    return pd.DataFrame({"term": top.index, "importance": top.values})
-
-
-def tree_rules(pipe, max_depth=3):
-    """The top levels of a fitted decision tree as readable if/else text."""
-    pre, clf = pipe.named_steps["pre"], pipe.named_steps["clf"]
-    return export_text(clf, feature_names=list(pre.get_feature_names_out()),
-                       max_depth=max_depth)
 
 
 def bert_token_attributions(model, tokenizer, text, device, max_len=256, n_steps=50):

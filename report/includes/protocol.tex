@@ -37,7 +37,7 @@ part of each model's pipeline, so it is fitted on the training rows only.
 \toprule
 \textbf{Block} & \textbf{Transformer} & \textbf{Columns} \\
 \midrule
-Text & TF-IDF (sublinear term frequency, word 1- and 2-grams, at least 3 documents) or BM25 & 20,000 \\
+Text & TF-IDF (sublinear term frequency, word 1- and 2-grams, at least 3 documents) & 20,000 \\
 Nominal & One-hot of employment type, industry, function and country; categories under 30 ads share one column & 110 \\
 Ordinal & Required experience and education as ordered levels & 2 \\
 Numeric & Description and title length, exclamation marks, share of capitals; scaled & 4 \\
@@ -49,11 +49,9 @@ training rows; tuning changes the vocabulary size).}
 \label{tab:features}
 \end{table}
 
-Two weightings of the text block are compared. TF-IDF is the course standard. BM25~\cite{robertson2009},
-the ranking function of classic search engines, differs in two ways: repeating a word has
-diminishing returns (term frequency saturates, controlled by $k_1$), and long ads are discounted
-against the average length (controlled by $b$). Since the two logistic regressions share every
-other component, their difference isolates the effect of the word weighting.
+TF-IDF weighs each word by how often it occurs in the ad and how rare it is across ads, so
+common words count little and distinctive words count a lot. The one-class SVM uses a different
+input built from the text block alone (Section~\ref{ocsvm}).
 
 \subsection{Metric and decision threshold}
 
@@ -61,8 +59,8 @@ The main metric is PR-AUC (average precision). It measures how well a model rank
 real ads without fixing a threshold, which matches the use case of a moderator queue ordered by
 score. Its floor is the fraud rate, 0.049, rather than 0.5. ROC-AUC is reported as well, but it
 counts the plentiful true negatives and therefore stays high even for weak
-models~\cite{saito2015}: the decision tree of Section~\ref{results} has ROC-AUC 0.843
-but PR-AUC 0.402.
+models~\cite{saito2015}: the one-class SVM of Section~\ref{results} has a ROC-AUC of 0.859
+but a PR-AUC of only 0.176.
 
 To also report precision, recall and F1, each model's scores are turned into decisions at the
 threshold that maximises F1 on the validation rows. F1 treats a missed fraud and a false alarm as
@@ -72,9 +70,11 @@ same score, so a tuned threshold would flag everything, and it keeps 0.5.
 
 \subsection{Tuning and test discipline}
 
-Hyper-parameters are tuned by random search over the grids of Table~\ref{tab:models}: 4 candidates
-per model and seed, each scored by PR-AUC with 3-fold \texttt{StratifiedGroupKFold} inside the
-training rows, so the grouping also holds within cross-validation. The best candidate is refitted
+Hyper-parameters are tuned on the training rows only, each candidate scored by PR-AUC with 3-fold
+\texttt{StratifiedGroupKFold}, so the grouping also holds within cross-validation. The supervised
+models use a random search of 4 candidates per seed; the one-class SVM searches its whole grid of
+10 candidates, because its score turned out to depend strongly on one setting
+(Section~\ref{models}). The best candidate is refitted
 on all training rows. The test rows are then scored exactly once per (model, seed), and test
 numbers are not printed while experiments run, so they cannot influence any choice. Every run
 saves its metrics, threshold, chosen hyper-parameters and raw scores, which is what Sections

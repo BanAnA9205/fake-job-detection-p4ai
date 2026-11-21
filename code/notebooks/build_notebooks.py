@@ -372,11 +372,11 @@ print("flags dropped:", dropped or "none")
 
 NB2 = [
     ("md", """
-# Classical ML: dummy, logistic regression, BM25, tree, MLP, Naive Bayes, one-class SVM (notebook 02)
+# Classical ML: dummy, logistic regression, BM25, MLP, Naive Bayes, one-class SVM (notebook 02)
 
 Part A walks through one seed-0 split with the pipeline from the course slides: dummy
-baseline, TF-IDF logistic regression with a threshold picked on validation, BM25, a decision
-tree, an MLP, Complement Naive Bayes and an unsupervised one-class SVM, then explanations and
+baseline, TF-IDF logistic regression with a threshold picked on validation, BM25, an MLP,
+Complement Naive Bayes and an unsupervised one-class SVM, then explanations and
 error reading. Only training and validation rows
 are used there. Part B runs the tuned experiment for all five split seeds (finished runs are
 reused from `outputs/classical/`, so this is fast unless you delete them); the test split is
@@ -384,7 +384,7 @@ scored once per (model, seed) inside the run. Comparing and plotting the saved r
 notebook 04.
 
 Run time: about 5 minutes for part A; part B is under a minute when the saved runs exist, or
-about an hour if it has to recompute all 35 runs.
+about an hour if it has to recompute all 30 runs.
 """),
     ("code", """
 import sys, os; os.chdir(os.path.join(os.getcwd(), "..")) if os.path.basename(os.getcwd()) == "notebooks" else None; sys.path.insert(0, "."); import warnings
@@ -555,21 +555,6 @@ in the numbers comes from the weighting alone.
 report("logreg_bm25", md.get_models(SEED)["logreg_bm25"].fit(train, y_train))
 """),
     ("md", """
-## Decision tree
-
-Easy to read, prone to overfitting on sparse text. `tree_rules` prints the top
-levels of the fitted tree; `top_tree_features` lists the features it leans on.
-"""),
-    ("code", """
-report("tree", md.get_models(SEED)["tree"].fit(train, y_train))
-"""),
-    ("code", """
-print(eh.tree_rules(fitted["tree"], max_depth=3))
-"""),
-    ("code", """
-eh.top_tree_features(fitted["tree"], k=10)
-"""),
-    ("md", """
 ## MLP on the same features
 
 A small sklearn neural network. It has no `class_weight`, so we rely on the ranking
@@ -594,32 +579,60 @@ report("cnb", md.get_models(SEED)["cnb"].fit(train, y_train))
 
 Anomaly detection view: learn what a *real* ad looks like from the real training ads only, then
 flag ads that do not fit. The detector never sees a fraud example; the labels are used only to
-leave the frauds out of its training data (and, in part B, to pick `nu`). An RBF kernel needs
-dense, low-dimensional input, so the TF-IDF matrix is first reduced to 100 to 200 dimensions with
-truncated SVD (as in LSA). The score is how far an ad lies outside the "normal" region.
+leave the frauds out of its training data and, in part B, to choose its settings.
+
+Two choices make this a fair test. First, the input is the **text only**: in the full feature
+matrix four numeric columns (lengths, capitals) make up about half of each row's length, and an
+RBF kernel works on distances, so it would mostly compare ad lengths. Second, the RBF kernel needs
+short dense input, so the TF-IDF text is reduced to 100 dimensions with **PCA** (the `arpack`
+solver works on the sparse matrix directly) and each row is rescaled to unit length. The score is
+how far an ad lies outside the region of the real ads.
 """),
     ("code", """
 report("ocsvm", md.get_models(SEED)["ocsvm"].fit(train, y_train))
 """),
     ("md", """
-Is the fraud signal missing from these features, or does the "unusual = fraud" assumption fail?
-Check: the same preprocessing and the same 200-dimensional SVD, but a supervised logistic
-regression that is allowed to see the labels.
+### gamma decides how "unusual" is measured
+
+`gamma` sets how local the RBF kernel is. Grouped 3-fold CV on the training rows only, for a few
+values (this takes a few minutes):
 """),
     ("code", """
-from sklearn.decomposition import TruncatedSVD
+from sklearn.model_selection import StratifiedGroupKFold, cross_val_score
+
+folds = StratifiedGroupKFold(n_splits=3, shuffle=True, random_state=SEED)
+for gamma in [0.3, 3, 30, 300]:
+    pipe = md.get_models(SEED)["ocsvm"].set_params(clf__detector__svm__gamma=gamma)
+    pr = cross_val_score(pipe, train, y_train, groups=train["group"], cv=folds,
+                         scoring="average_precision")
+    roc = cross_val_score(pipe, train, y_train, groups=train["group"], cv=folds, scoring="roc_auc")
+    print(f"gamma {gamma:>5}: CV PR-AUC {pr.mean():.3f}  ROC-AUC {roc.mean():.3f}")
+"""),
+    ("md", """
+Reading: with a broad kernel (small gamma) the ROC-AUC is far **below** 0.5, so frauds look *more*
+typical than real ads: many are repeated templates that sit in dense regions. With a local kernel
+(gamma around 30) the detector asks whether an ad has a close neighbour among the real ads, and
+frauds often do not. The fraud base rate (PR-AUC floor) is about 0.049.
+"""),
+    ("md", """
+Is the remaining gap to the supervised models a lack of information in these features, or a limit
+of the anomaly view? Check: the same text, the same PCA, but a supervised logistic regression
+that is allowed to see the labels.
+"""),
+    ("code", """
+from sklearn.compose import ColumnTransformer
+from sklearn.decomposition import PCA
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 
-svd_lr = Pipeline([("pre", ft.make_preprocessor("tfidf")),
-                   ("svd", TruncatedSVD(n_components=200, random_state=SEED)),
+pca_lr = Pipeline([("pre", ColumnTransformer([("text", ft.make_tfidf(), "text")])),
+                   ("pca", PCA(n_components=100, svd_solver="arpack", random_state=SEED)),
                    ("clf", LogisticRegression(class_weight="balanced", max_iter=2000))])
-report("svd_logreg (check)", svd_lr.fit(train, y_train))
+report("pca_logreg (check)", pca_lr.fit(train, y_train))
 """),
     ("md", """
 Reading: if the supervised model on the very same features scores far above the one-class SVM,
-the information is there and it is the anomaly assumption that fails: fraudulent ads are not
-unusual ads; many are generic, template-like postings.
+the information is there and the labels are what the anomaly view is missing.
 """),
     ("md", """
 ## All models side by side
@@ -970,10 +983,10 @@ not by all.
 """),
     ("code", """
 # Which test frauds each model catches at its own threshold.
-SKIP_CATCH = ("dummy_majority", "ocsvm", "zeroshot_")
+SKIP_CATCH = ("dummy_majority", "zeroshot_")
 fraud_idx = np.where(y_test == 1)[0]
-# Left out (by name prefix): the dummy flags nothing, and the one-class SVM and the zero-shot
-# LLM rank ads at chance level, so the frauds they "catch" are luck, not signal.
+# Left out (by name prefix): the dummy flags nothing, and the zero-shot LLM ranks ads at chance
+# level, so the frauds it "catches" are luck, not signal.
 caught = {name: frozenset(fraud_idx[s["score_test"][fraud_idx] >= thr])
           for name, (s, thr) in seed_runs.items() if not name.startswith(SKIP_CATCH)}
 
@@ -1069,21 +1082,21 @@ dh.seed_everything(SEED)
 sns.set_theme(style="whitegrid")
 """),
     ("md", """
-## Stacking DistilBERT with BM25 logistic regression
+## Stacking DistilBERT with TF-IDF logistic regression
 
 The two models catch different frauds (see "Explaining DistilBERT, part 1" below), so we test
 whether combining them helps. The standard way: a logistic regression that takes the two saved
 scores (as logits) as its only two inputs. It is fitted on the validation rows, because both
 models were trained on the training rows and their training scores are over-confident. The
 threshold comes from 5-fold grouped out-of-fold scores inside validation, so it never sees a row
-the stacker was fitted on; test is scored once. BM25 logistic regression is the partner because it
-is the best classical model: the question is whether DistilBERT adds anything to it.
+the stacker was fitted on; test is scored once. TF-IDF logistic regression is the partner because it
+is the standard classical baseline and the model DistilBERT disagrees with in part 1 below.
 """),
     ("code", """
 from modules import stacking
 
 A = (OUT_DEEP, "bert_distilbert-base-uncased")
-B = (OUT_CLASSICAL, "logreg_bm25")
+B = (OUT_CLASSICAL, "logreg")
 if all(rh.result_exists(*m, s) for m in (A, B) for s in range(5)):
     df_stack = ft.add_engineered_features(dh.clean(dh.load_raw(DATA)))
     stacking.run_stack(df_stack, range(5), A, B, out_dir=OUT_STACK)
@@ -1208,20 +1221,21 @@ the threshold; words for a false alarm show what misled the model.
 
 Numbers are test PR-AUC, means over the 5 split seeds in the first table.
 
-- Every supervised text model beats the dummy floor (0.049) by a wide margin: 0.77 to 0.85, except
-  the single decision tree (0.40).
+- Every supervised text model beats the dummy floor (0.049) by a wide margin: 0.77 to 0.85.
 - Logistic regression with TF-IDF (0.821), with BM25 (0.847) and the MLP (0.846) overlap: the
   spread across seeds (std about 0.06 to 0.08) is larger than the gaps between their means. Paired
-  by seed, though, BM25 beats TF-IDF on all 5 seeds (mean +0.026), while the MLP and BM25 split
-  3 to 2 (mean -0.001). The MLP costs about 7 minutes per seed against 1 to 1.5 for the logistic regressions.
+  by seed, though, BM25 beats TF-IDF on all 5 seeds (mean +0.026). The MLP costs about 7 minutes
+  per seed against 1 to 1.5 for the logistic regressions.
 - Complement Naive Bayes reaches 0.773: below TF-IDF logistic regression on 4 of 5 seeds (mean
   difference -0.048), but with the smallest spread across seeds of any supervised model (std 0.029).
-- The one-class SVM, trained on real ads only, scores 0.057 (ROC-AUC 0.47), no better than the
-  dummy. A supervised logistic regression on the same SVD features does far better (part A of
-  notebook 02), so the signal is in the features: fraudulent ads are simply not unusual ads. This is
-  why the project treats the task as supervised classification, not anomaly detection.
-- Train minus test PR-AUC is 0.15 to 0.17 for the logistic regressions, the MLP and Naive Bayes,
-  and 0.24 for the tree: all of them fit their training rows much better than unseen ads.
+- The one-class SVM, trained on real ads only and reading the text only, scores 0.176 (ROC-AUC
+  0.86): well above the floor but far below the supervised models. Its kernel width decides
+  everything (notebook 02): broad kernels rank frauds as more typical than real ads, a local kernel
+  (gamma = 30, chosen on every seed) asks whether an ad has close real neighbours. On seed 0 it is
+  the only model that catches 16 of the test frauds. Its training PR-AUC of about 1.0 is
+  memorisation of the real training ads by the local kernel, not leakage.
+- Train minus test PR-AUC is 0.15 to 0.17 for the logistic regressions, the MLP and Naive Bayes:
+  all of them fit their training rows much better than unseen ads.
 - Caveat: the dataset marks real ads from some countries (for example Greece) as 0%
   fraud, so part of the signal may come from how the data was collected.
 """),
@@ -1242,10 +1256,10 @@ Numbers are test PR-AUC, means over the 5 split seeds (seed 0 for the error anal
   both catch 109, only DistilBERT 12, only logistic regression 15, neither 35. Their test scores
   have a Spearman correlation of only 0.39.
 - Stacking the two (a logistic regression on the two saved scores, fitted on validation) reaches
-  0.878 (std 0.068), the best result of the project. It beats BM25 logistic regression on all 5
-  seeds (+0.022 to +0.036, mean +0.030) and DistilBERT on all 5 (mean +0.062). The paired gain is
-  small but has the same sign on every seed, unlike the gaps between single models. Per standard
-  deviation of its input, BM25's weight in the stacker is 3 to 6 times DistilBERT's. Caveat: DistilBERT's validation scores come from
+  0.867 (std 0.066), the best result of the project. It beats TF-IDF logistic regression on all 5
+  seeds (+0.030 to +0.090, mean +0.047) and DistilBERT on all 5 (mean +0.052). The paired gain has
+  the same sign on every seed, unlike the gaps between single models. Per standard deviation of
+  its input, logistic regression's weight in the stacker is 2 to 5 times DistilBERT's. Caveat: DistilBERT's validation scores come from
   the epoch chosen on validation, so they are slightly optimistic; the test rows were never used.
 - Frozen sentence embeddings with a logistic-regression head reach 0.524: well above the dummy but
   far below TF-IDF. A 384-dimensional summary of the meaning of an ad loses the specific words

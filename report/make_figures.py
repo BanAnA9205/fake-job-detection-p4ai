@@ -40,16 +40,16 @@ plt.rcParams.update({
 NAMES = {
     "logreg_bm25": "BM25 + LR", "mlp": "TF-IDF + MLP", "logreg": "TF-IDF + LR",
     "bert_distilbert-base-uncased": "DistilBERT (fine-tuned)", "cnb": "Complement NB",
-    "emb_logreg": "MiniLM embeddings + LR", "tree": "Decision tree",
+    "emb_logreg": "MiniLM embeddings + LR",
     "zeroshot_Qwen2.5-1.5B-Instruct": "Qwen2.5-1.5B (zero-shot)", "ocsvm": "One-class SVM",
-    "dummy_majority": "Majority dummy", "stack_bert_logreg_bm25": "Stack: DistilBERT + BM25 LR",
+    "dummy_majority": "Majority dummy", "stack_bert_logreg": "Stack: DistilBERT + TF-IDF LR",
 }
-SHORT = {"stack_bert_logreg_bm25": "Stack", "logreg_bm25": "BM25 LR", "logreg": "TF-IDF LR",
+SHORT = {"stack_bert_logreg": "Stack", "logreg_bm25": "BM25 LR", "logreg": "TF-IDF LR",
          "bert_distilbert-base-uncased": "DistilBERT", "mlp": "MLP", "cnb": "Compl. NB"}
 FAMILY = {"logreg_bm25": "classical", "mlp": "classical", "logreg": "classical", "cnb": "classical",
-          "tree": "classical", "bert_distilbert-base-uncased": "deep", "emb_logreg": "deep",
+          "bert_distilbert-base-uncased": "deep", "emb_logreg": "deep",
           "zeroshot_Qwen2.5-1.5B-Instruct": "no labels", "ocsvm": "no labels",
-          "dummy_majority": "no labels", "stack_bert_logreg_bm25": "stack"}
+          "dummy_majority": "no labels", "stack_bert_logreg": "stack"}
 FAMILY_COLOR = {"classical": BLUE, "deep": ORANGE, "stack": AQUA, "no labels": GRAY}
 
 
@@ -103,10 +103,10 @@ def fig_seeds(res):
 
 def fig_pr_curves(res):
     """Seed-0 precision-recall curves on the test split for four representative models."""
-    picks = [("logreg_bm25", "classical", BLUE, "-"),
+    picks = [("logreg", "classical", BLUE, "-"),
              ("bert_distilbert-base-uncased", "deep", ORANGE, "--"),
-             ("stack_bert_logreg_bm25", "stack", AQUA, "-"),
-             ("emb_logreg", "deep", YELLOW, ":")]
+             ("stack_bert_logreg", "stack", AQUA, "-"),
+             ("ocsvm", "classical", YELLOW, ":")]
     fig, ax = plt.subplots(figsize=(4.6, 3.4))
     for m, group, c, ls in picks:
         s = rh.load_scores(f"outputs/{group}", m, 0)
@@ -154,9 +154,9 @@ def write_tables(res):
         f.write("\n".join(lines) + "\n")
 
     t = res.pivot(index="seed", columns="model", values="test_pr_auc")
-    pairs = [("stack_bert_logreg_bm25", "logreg_bm25"), ("stack_bert_logreg_bm25", "bert_distilbert-base-uncased"),
-             ("bert_distilbert-base-uncased", "logreg_bm25"), ("bert_distilbert-base-uncased", "logreg"),
-             ("logreg_bm25", "logreg"), ("mlp", "logreg_bm25"), ("cnb", "logreg")]
+    pairs = [("stack_bert_logreg", "logreg"), ("stack_bert_logreg", "bert_distilbert-base-uncased"),
+             ("bert_distilbert-base-uncased", "logreg"), ("logreg_bm25", "logreg"),
+             ("mlp", "logreg"), ("cnb", "logreg")]
     lines = []
     for a, b in pairs:
         d = t[a] - t[b]

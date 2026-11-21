@@ -35,13 +35,13 @@ the test set. Saito and Rehmsmeier~\cite{saito2015} show that ROC curves look
 optimistic when negatives dominate and that precision-recall curves are more informative, because
 they ignore the large number of easy true negatives.
 
-\subsection{Explaining text classifiers}
+\subsection{Explaining neural text classifiers}
 
-LIME~\cite{ribeiro2016} and SHAP~\cite{lundberg2017} explain a single
-prediction of any model by perturbing its input. For neural networks, Integrated
-Gradients~\cite{sundararajan2017} uses the model's own gradients instead and has a
-useful guarantee, completeness: the attributions of an input add up exactly to the change in the
-model's output between a reference input and that input.
+A linear model can be read from its coefficients, but a transformer cannot. Integrated
+Gradients~\cite{sundararajan2017} explains a single prediction of a neural network by following
+the model's gradients from a neutral reference input to the actual input. It has a useful
+guarantee, completeness: the attributions of an input add up exactly to the change in the model's
+output between the reference and that input.
 
 \subsection{Research gap}
 

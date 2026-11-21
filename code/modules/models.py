@@ -2,7 +2,8 @@
 
 import numpy as np
 from sklearn.base import BaseEstimator, ClassifierMixin, clone
-from sklearn.decomposition import TruncatedSVD
+from sklearn.compose import ColumnTransformer
+from sklearn.decomposition import PCA
 from sklearn.dummy import DummyClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import RandomizedSearchCV, StratifiedGroupKFold
@@ -11,9 +12,8 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import Normalizer
 from sklearn.svm import OneClassSVM
-from sklearn.tree import DecisionTreeClassifier
 
-from modules.features import make_preprocessor
+from modules.features import make_preprocessor, make_tfidf
 
 
 def get_baselines(seed=0):
@@ -48,19 +48,14 @@ def _logreg(seed):
 
 
 def get_models(seed=0):
-    """Six candidate pipelines. Each is preprocessing ("pre") followed by a classifier ("clf").
+    """Five candidate pipelines. Each is preprocessing ("pre") followed by a classifier ("clf").
 
     logreg and logreg_bm25 differ only in how words are weighted, so the pair isolates
-    TF-IDF versus BM25. tree, mlp, cnb and ocsvm use the TF-IDF features.
+    TF-IDF versus BM25. mlp and cnb use the same TF-IDF features; ocsvm uses the text only.
     """
     return {
         "logreg": Pipeline([("pre", make_preprocessor("tfidf")), ("clf", _logreg(seed))]),
         "logreg_bm25": Pipeline([("pre", make_preprocessor("bm25")), ("clf", _logreg(seed))]),
-        "tree": Pipeline([
-            ("pre", make_preprocessor("tfidf")),
-            ("clf", DecisionTreeClassifier(class_weight="balanced", min_samples_leaf=5,
-                                           random_state=seed)),
-        ]),
         "mlp": Pipeline([
             ("pre", make_preprocessor("tfidf")),
             # MLPClassifier has no class_weight; the decision threshold is chosen on
@@ -71,14 +66,17 @@ def get_models(seed=0):
         # Classic text baseline. ComplementNB is the Naive Bayes variant meant for imbalanced
         # classes; it needs non-negative inputs, which the shared preprocessor produces.
         "cnb": Pipeline([("pre", make_preprocessor("tfidf")), ("clf", ComplementNB())]),
-        # Unsupervised: RBF kernels need dense, low-dimensional input, so TF-IDF is first
-        # reduced with SVD (as in LSA) and each row rescaled to unit length.
+        # Unsupervised, text only: in the full feature matrix four numeric columns make up
+        # about half of each row's length and would dominate the distances an RBF kernel uses.
+        # The kernel also needs short dense input, so TF-IDF is reduced with PCA ("arpack"
+        # works on the sparse matrix directly) and each row is rescaled to unit length.
         "ocsvm": Pipeline([
-            ("pre", make_preprocessor("tfidf")),
+            ("pre", ColumnTransformer([("text", make_tfidf(), "text")])),
             ("clf", OneClassDetector(Pipeline([
-                ("svd", TruncatedSVD(n_components=200, random_state=seed)),
+                ("pca", PCA(n_components=100, svd_solver="arpack", random_state=seed)),
                 ("norm", Normalizer()),
-                ("svm", OneClassSVM(kernel="rbf", gamma="scale")),
+                # Defaults = the best setting of a grouped-CV map on the seed-0 training rows.
+                ("svm", OneClassSVM(kernel="rbf", nu=0.1, gamma=30.0)),
             ]))),
         ]),
     }
@@ -97,10 +95,6 @@ PARAM_GRIDS = {
         "pre__text__bm25__k1": [1.2, 1.5, 2.0],
         "pre__text__bm25__b": [0.5, 0.75, 1.0],
     },
-    "tree": {
-        "clf__max_depth": [10, 20, 40],
-        "clf__min_samples_leaf": [2, 5, 20],
-    },
     "mlp": {
         "clf__hidden_layer_sizes": [(64,), (128,), (256,)],
         "clf__alpha": [1e-4, 1e-3, 1e-2],
@@ -109,12 +103,19 @@ PARAM_GRIDS = {
         "clf__alpha": [0.01, 0.1, 0.3, 1.0],
         "pre__text__max_features": [10000, 30000],
     },
-    # nu is roughly the share of training ads allowed to look unusual.
+    # gamma sets how local the RBF kernel is (rows have unit length, so squared distances lie
+    # between 0 and 4). A seed-0 map of the CV score showed that gamma decides almost everything:
+    # broad kernels (gamma <= 1) rank frauds as more typical than real ads, the score peaks
+    # around gamma = 30 and falls again beyond it, and nu (roughly the share of training ads
+    # allowed to look unusual) barely matters.
     "ocsvm": {
-        "clf__detector__svm__nu": [0.01, 0.05, 0.1, 0.2],
-        "clf__detector__svd__n_components": [100, 200],
+        "clf__detector__svm__nu": [0.05, 0.2],
+        "clf__detector__svm__gamma": [3.0, 10.0, 30.0, 100.0, 300.0],
     },
 }
+
+# Models whose whole grid is searched instead of n_iter random candidates.
+FULL_GRID = {"ocsvm"}
 
 
 def tune(pipe, grid, X, y, groups, n_iter=8, cv=5, scoring="average_precision",

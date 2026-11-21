@@ -1,49 +1,58 @@
 \section{Discussion}
 \label{discussion}
 
-The results and explanations raise two questions: why a linear model on word counts holds its own
-against a pretrained transformer, and why the label-free detectors fail. This section offers an
-interpretation of both, then sets out the limits of what the experiments can show.
+The results and explanations raise three questions: why word counts hold their own against a
+pretrained transformer, what the one-class SVM tells us about fraud in EMSCAD, and how far these
+conclusions reach. This section takes them in turn.
 
 \subsection{Why word counts compete with a pretrained transformer}
 
-BM25 LR beats fine-tuned DistilBERT on every seed, and in the stack it carries most of the weight.
-Our interpretation is that much of the fraud signal in EMSCAD lies in exact words: pay amounts,
-the templates of a few posters, employer names and the placeholders that replaced contact details.
-A sparse linear model gives each such word its own weight and can learn it from a handful of the
-514 training frauds. DistilBERT, by contrast, reads only the first 256 tokens and represents an
-ad by its meaning, which helps where the wording is new (the 12 frauds that only DistilBERT
-catches) but adds little where a known phrase already decides. On this dataset, then, the
-transformer is most useful as a second opinion that makes different mistakes, which is exactly
+TF-IDF logistic regression matches fine-tuned DistilBERT, and in the stack it carries most of the
+weight. Our interpretation is that much of the fraud signal in EMSCAD lies in exact words: pay
+amounts, the templates of a few posters, employer names and the placeholders that replaced
+contact details. A sparse linear model gives each such word its own weight and can learn it from a
+handful of the 514 training frauds. DistilBERT, by contrast, reads only the first 256 tokens and
+represents an ad by its meaning, which helps where the wording is new (the 12 frauds that only
+DistilBERT catches) but adds little where a known phrase already decides. On this dataset, then,
+the transformer is most useful as a second opinion that makes different mistakes, which is exactly
 what the stack exploits; on its own it costs a GPU without improving on the linear model.
 
-\subsection{Why the label-free detectors fail}
+\subsection{What the one-class SVM shows}
 
-The two label-free detectors rest on assumptions that EMSCAD does not satisfy. The one-class SVM
-assumes that fraud is unusual, and the zero-shot model assumes that fraud looks like a textbook
-scam. Many frauds in EMSCAD are instead generic, well-formatted postings, such as the eleven IT
-roles that no model catches. The supervised logistic regression on the one-class SVM's own SVD
-features confirms that the signal is present in the features, which isolates the anomaly
-assumption as the cause. The practical consequence is that fraud labels are the scarce resource
-that matters: a job board without labelled fraud cannot reach the supervised results by turning to
-anomaly detection or to a general language model.
+The one-class SVM began as a near-failure and became an informative model once its input and
+kernel width were set properly, and both of its behaviours say something about the data. With a
+broad kernel it ranked frauds as \emph{more} typical than real ads. Many frauds are repeated
+templates, so they sit in dense regions of the text space, and an anomaly detector that judges ads
+against the bulk of the data treats them as normal. With a local kernel it asks a different
+question, whether an ad has close neighbours among the real ads, and that question separates the
+classes reasonably well (ROC-AUC 0.86), in our reading because a fraud template rarely has a real
+near-copy.
+
+Even at its best, however, it reaches a PR-AUC of only 0.176, against 0.66 for a supervised model
+on the same features, so labels remain the scarce resource that matters: a job board without
+labelled fraud would catch some frauds with anomaly detection, but far from all. Its real value in
+this study is that it fails differently. It catches 16 seed-0 test frauds that no supervised model
+catches, mostly hotel and call-centre vacancies that every supervised model scored below its
+threshold. Its low precision makes it unsuitable on its own, but as an additional signal for a
+moderator, or as a third input to the stack, it covers a blind spot of the supervised models.
 
 \subsection{Limitations}
 
-Several limits qualify these conclusions. All results come from a single dataset, and the
-country artefact and the poster templates show that part of what the models learn reflects how
-EMSCAD was collected, so the numbers would not transfer unchanged to another job board. The tuning
-budget is small (4 random candidates with 3-fold cross-validation per model and seed), a deliberate
-choice to keep the 35 classical runs to about an hour on a laptop. A larger search could move
-individual models, but every model received the same budget.
+Several limits qualify these conclusions. All results come from a single dataset, and the country
+artefact and the poster templates show that part of what the models learn reflects how EMSCAD was
+collected, so the numbers would not transfer unchanged to another job board. The tuning budget of
+the supervised models is small (4 random candidates with 3-fold cross-validation per seed), a
+deliberate choice to keep the classical runs to about an hour on a laptop; a larger search could
+move individual models, but every supervised model received the same budget.
 
 The validation rows also serve more than one purpose. DistilBERT chooses its best epoch on them and
-the MiniLM head chooses $C$ on them, and both then choose their threshold on the same rows, so
-their validation scores are slightly optimistic, and the stacker is fitted on those same scores.
-The test rows, however, are never used for any choice, so the test numbers remain honest.
+then its threshold on the same rows, so its validation scores are slightly optimistic, and the
+stacker is fitted on those same scores. The test rows, however, are never used for any choice, so
+the test numbers remain honest. For the one-class SVM the training score is meaningless, because
+its local kernel memorises the real training ads.
 
 Finally, the five splits reuse the same 17,599 ads, so the standard deviations measure sensitivity
 to the split rather than sampling error over new ads. The explanations are local: Integrated
 Gradients covers ten ads from one seed and the coefficient table one refit, so they show what
-drives these cases rather than a general rule. DistilBERT sees only 256 tokens and the zero-shot
-model 512, so long ads are truncated, whereas the TF-IDF models see every word.
+drives these cases rather than a general rule. DistilBERT also sees only the first 256 tokens of
+each ad, whereas the TF-IDF models see every word.

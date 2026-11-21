@@ -2,34 +2,34 @@
   "model": "ocsvm",
   "group": "classical",
   "seed": 1,
-  "thr": -19.0547342772918,
+  "thr": 0.33914826477514015,
   "val": {
-    "precision": 0.07084188911704312,
-    "recall": 0.40350877192982454,
-    "f1": 0.1205240174672489,
-    "tp": 69,
-    "fp": 905,
-    "fn": 102,
-    "tn": 2444,
-    "pr_auc": 0.07651036313835666,
-    "roc_auc": 0.5583057873608077
+    "precision": 0.17901234567901234,
+    "recall": 0.6783625730994152,
+    "f1": 0.28327228327228327,
+    "tp": 116,
+    "fp": 532,
+    "fn": 55,
+    "tn": 2817,
+    "pr_auc": 0.1566532680062197,
+    "roc_auc": 0.8524688350716544
   },
   "test": {
-    "precision": 0.03861003861003861,
-    "recall": 0.23391812865497075,
-    "f1": 0.06628003314001657,
-    "tp": 40,
-    "fp": 996,
-    "fn": 131,
-    "tn": 2353,
-    "pr_auc": 0.04554720257904042,
-    "roc_auc": 0.4257725532104373
+    "precision": 0.1712,
+    "recall": 0.6257309941520468,
+    "f1": 0.26884422110552764,
+    "tp": 107,
+    "fp": 518,
+    "fn": 64,
+    "tn": 2831,
+    "pr_auc": 0.16561523123657362,
+    "roc_auc": 0.8513931888544892
   },
-  "train_pr_auc": 0.07845469364321066,
+  "train_pr_auc": 0.9981544847091712,
   "best_params": {
     "clf__detector__svm__nu": 0.2,
-    "clf__detector__svd__n_components": 200
+    "clf__detector__svm__gamma": 30.0
   },
-  "seconds": 120.7,
-  "notes": "tuned with 4 random candidates, 3-fold grouped CV; cv PR-AUC 0.08325127403300119; warnings: none"
+  "seconds": 295.2,
+  "notes": "tuned with the full grid of 10 candidates, 3-fold grouped CV; cv PR-AUC 0.1583240240437617; warnings: none"
 }

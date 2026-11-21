@@ -91,7 +91,7 @@ def test_baselines():
 
 def test_models_are_named_pipelines():
     models = models_mod.get_models()
-    assert set(models) == {"logreg", "logreg_bm25", "tree", "mlp", "cnb", "ocsvm"}
+    assert set(models) == {"logreg", "logreg_bm25", "mlp", "cnb", "ocsvm"}
     for name, pipe in models.items():
         assert isinstance(pipe, Pipeline), name
         assert [step for step, _ in pipe.steps] == ["pre", "clf"], name
