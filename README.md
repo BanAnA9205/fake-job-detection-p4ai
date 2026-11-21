@@ -15,6 +15,7 @@ Combination: a stack of DistilBERT and TF-IDF logistic regression (logistic regr
 - `code/splits/`                saved train/val/test indices per seed; related ads (same description, company or near-copy) never cross splits
 - `code/tests/`                 plain-assert tests on synthetic data (run as scripts; `test_finetune_helper.py` uses torch, so run it on the GPU server only)
 - `docs/`                       assignment spec and the literature review draft
+- `materials/report/`           LaTeX source of the report (`main.tex`); `code/make_report_figures.py` regenerates its figures and result tables
 
 Setup: `python -m venv .venv && .venv/bin/pip install -r code/requirements.txt`, then run tests with
 `cd code && for t in tests/test_*.py; do ../.venv/bin/python $t; done` (adjust the venv path).

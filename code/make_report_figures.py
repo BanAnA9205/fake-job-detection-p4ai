@@ -1,15 +1,15 @@
-"""Figures for the report, built only from the saved results (no model is fitted).
+"""Figures and tables for the report, built from the processed data and the saved results.
 
-Run from the repo root: code/.venv/bin/python report/make_figures.py
-Writes PDFs to report/img/ and LaTeX tables to report/includes/tab_*.tex.
+Run from code/: .venv/bin/python make_report_figures.py
+Writes PDFs to materials/report/img/ and LaTeX tables to materials/report/includes/tab_*.tex.
 """
 
 import json
 import os
 import sys
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-CODE = os.path.join(HERE, "..", "code")
+CODE = os.path.dirname(os.path.abspath(__file__))
+REPORT = os.path.join(CODE, "..", "materials", "report")
 sys.path.insert(0, CODE)
 os.chdir(CODE)
 
@@ -23,7 +23,7 @@ from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
 from modules import data_helper as dh, explain_helper as eh, features as ft, models as md
 from modules import results_helper as rh
 
-OUT = os.path.join(HERE, "img")
+OUT = os.path.join(REPORT, "img")
 BLUE, ORANGE, AQUA = "#2a78d6", "#eb6834", "#1baf7a"
 GRAY, INK, MUTED = "#8a8985", "#0b0b0b", "#52514e"
 
@@ -110,7 +110,7 @@ def write_tables(res):
                  ("test_pr_auc", "test_roc_auc", "test_f1", "test_precision", "test_recall")]
         sec = g["seconds"].mean()
         lines.append(f"{NAMES[m]} & " + " & ".join(cells) + (f" & {sec:.0f} \\\\" if sec == sec else " & -- \\\\"))
-    with open(os.path.join(HERE, "includes", "tab_headline.tex"), "w") as f:
+    with open(os.path.join(REPORT, "includes", "tab_headline.tex"), "w") as f:
         f.write("\n".join(lines) + "\n")
 
     t = res.pivot(index="seed", columns="model", values="test_pr_auc")
@@ -122,7 +122,7 @@ def write_tables(res):
         wins = int((d > 0).sum())
         lines.append(f"{SHORT[a]} $-$ {SHORT[b]} & " + " & ".join(f"{x:+.3f}" for x in d)
                      + f" & {d.mean():+.3f} & {wins}/5 \\\\")
-    with open(os.path.join(HERE, "includes", "tab_paired.tex"), "w") as f:
+    with open(os.path.join(REPORT, "includes", "tab_paired.tex"), "w") as f:
         f.write("\n".join(lines) + "\n")
     print("wrote tab_headline.tex, tab_paired.tex")
 
@@ -151,7 +151,7 @@ def write_term_table(k=10):
     neg = t[t["direction"] == "negative"].reset_index(drop=True)
     lines = [f"{_tex(name(p.term))} & {p.coef:+.2f} & {_tex(name(n.term))} & {n.coef:+.2f} \\\\"
              for p, n in zip(pos.itertuples(), neg.itertuples())]
-    with open(os.path.join(HERE, "includes", "tab_terms.tex"), "w") as f:
+    with open(os.path.join(REPORT, "includes", "tab_terms.tex"), "w") as f:
         f.write("\n".join(lines) + "\n")
     print("wrote tab_terms.tex")
 
@@ -185,7 +185,7 @@ def write_ig_table(k=5):
         title = title if len(title) <= 26 else title[:24] + "..."
         lines.append(f"{r['kind']} & {_tex(title)} & {r['score']:.3f} & {sum(attrs):+.2f} & "
                      f"{_tex(', '.join(top))} \\\\")
-    with open(os.path.join(HERE, "includes", "tab_ig.tex"), "w") as f:
+    with open(os.path.join(REPORT, "includes", "tab_ig.tex"), "w") as f:
         f.write("\n".join(lines) + "\n")
     print("wrote tab_ig.tex")
 
