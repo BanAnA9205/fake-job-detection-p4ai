@@ -20,6 +20,6 @@ Setup: `python -m venv .venv && .venv/bin/pip install -r code/requirements.txt`,
 Notebook 03 needs a GPU and `torch`, `transformers`, `sentence-transformers`, `captum`; its heavy cells run only when `ON_GPU_SERVER = True`.
 `code/notebooks/build_notebooks.py` regenerates the four notebooks (it wipes their saved outputs).
 
-Headline result (test PR-AUC, mean of 5 split seeds): BM25 logistic regression 0.847, TF-IDF MLP 0.846, TF-IDF logistic regression 0.821,
+Headline result (test PR-AUC, mean of 5 split seeds): stack of DistilBERT + BM25 logistic regression 0.878, BM25 logistic regression 0.847, TF-IDF MLP 0.846, TF-IDF logistic regression 0.821,
 fine-tuned DistilBERT 0.816, Complement Naive Bayes 0.773, frozen embeddings + logistic regression 0.524, decision tree 0.402,
 zero-shot Qwen2.5-1.5B 0.078, one-class SVM 0.057, dummy 0.049. See notebook 04.

@@ -1,0 +1,42 @@
+{
+  "model": "stack_bert_logreg_bm25",
+  "group": "stack",
+  "seed": 1,
+  "thr": 0.9751067544525747,
+  "val": {
+    "precision": 0.9103448275862069,
+    "recall": 0.7719298245614035,
+    "f1": 0.8354430379746836,
+    "tp": 132,
+    "fp": 13,
+    "fn": 39,
+    "tn": 3336,
+    "pr_auc": 0.8730081989597099,
+    "roc_auc": 0.9858873819364775
+  },
+  "test": {
+    "precision": 0.907563025210084,
+    "recall": 0.631578947368421,
+    "f1": 0.7448275862068966,
+    "tp": 108,
+    "fp": 11,
+    "fn": 63,
+    "tn": 3338,
+    "pr_auc": 0.8764958005196318,
+    "roc_auc": 0.989360531816253
+  },
+  "train_pr_auc": null,
+  "best_params": {
+    "inputs": [
+      "bert_distilbert-base-uncased",
+      "logreg_bm25"
+    ],
+    "weights": [
+      0.3097027808186287,
+      0.7115284529079439
+    ],
+    "intercept": 2.506530411132064
+  },
+  "seconds": null,
+  "notes": "logistic regression on the logits of the two saved scores, fitted on validation; threshold from 5-fold grouped out-of-fold scores"
+}

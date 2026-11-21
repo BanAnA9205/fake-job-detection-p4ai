@@ -760,7 +760,7 @@ if RUN_CLASSICAL:
 
 NB4_RESULTS = [
     ("code", """
-DIRS = {"classical": OUT_CLASSICAL, "deep": OUT_DEEP}
+DIRS = {"classical": OUT_CLASSICAL, "deep": OUT_DEEP, "stack": OUT_STACK}
 
 
 class StopExecution(Exception):
@@ -1031,8 +1031,10 @@ NB4_HEAD = [
     ("md", """
 # Analysis of the results (notebook 04)
 
-Notebooks 02 and 03 run the models; this one only reads what they saved in 
-and . Nothing is fitted here. It compares all models on the same five splits:
+Notebooks 02 and 03 run the models; this one only reads what they saved in `outputs/classical/`
+and `outputs/deep/`. The only model fitted here is a two-input logistic regression that stacks two
+saved runs (first section); it is CPU-only and takes seconds. Then it compares all models on the
+same five splits:
 headline metrics, validation versus test, generalisation gap, per-seed spread, curves and
 confusion matrices of seed 0, the training curves of the fine-tuned model, and which frauds
 each model catches or misses.
@@ -1060,10 +1062,33 @@ SEED = 0
 SPLIT_PATH = "splits/seed0.npz"
 OUT_CLASSICAL = "outputs/classical"
 OUT_DEEP = "outputs/deep"
-GROUPS = ["classical", "deep"]
+OUT_STACK = "outputs/stack"
+GROUPS = ["classical", "deep", "stack"]
 
 dh.seed_everything(SEED)
 sns.set_theme(style="whitegrid")
+"""),
+    ("md", """
+## Stacking DistilBERT with BM25 logistic regression
+
+The two models catch different frauds (see "Explaining DistilBERT, part 1" below), so we test
+whether combining them helps. The standard way: a logistic regression that takes the two saved
+scores (as logits) as its only two inputs. It is fitted on the validation rows, because both
+models were trained on the training rows and their training scores are over-confident. The
+threshold comes from 5-fold grouped out-of-fold scores inside validation, so it never sees a row
+the stacker was fitted on; test is scored once. BM25 logistic regression is the partner because it
+is the best classical model: the question is whether DistilBERT adds anything to it.
+"""),
+    ("code", """
+from modules import stacking
+
+A = (OUT_DEEP, "bert_distilbert-base-uncased")
+B = (OUT_CLASSICAL, "logreg_bm25")
+if all(rh.result_exists(*m, s) for m in (A, B) for s in range(5)):
+    df_stack = ft.add_engineered_features(dh.clean(dh.load_raw(DATA)))
+    stacking.run_stack(df_stack, range(5), A, B, out_dir=OUT_STACK)
+else:
+    print("needs all 5 seeds of both runs; skipping the stack")
 """),
 ]
 
@@ -1215,6 +1240,12 @@ Numbers are test PR-AUC, means over the 5 split seeds (seed 0 for the error anal
 - DistilBERT and TF-IDF logistic regression make different mistakes (seed 0, 171 test frauds):
   both catch 109, only DistilBERT 12, only logistic regression 15, neither 35. Their test scores
   have a Spearman correlation of only 0.39.
+- Stacking the two (a logistic regression on the two saved scores, fitted on validation) reaches
+  0.878 (std 0.068), the best result of the project. It beats BM25 logistic regression on all 5
+  seeds (+0.022 to +0.036, mean +0.030) and DistilBERT on all 5 (mean +0.062). The paired gain is
+  small but has the same sign on every seed, unlike the gaps between single models. The stacker
+  weights BM25 about twice as much as DistilBERT. Caveat: DistilBERT's validation scores come from
+  the epoch chosen on validation, so they are slightly optimistic; the test rows were never used.
 - Frozen sentence embeddings with a logistic-regression head reach 0.524: well above the dummy but
   far below TF-IDF. A 384-dimensional summary of the meaning of an ad loses the specific words
   (pay amounts, "data entry") that separate fraud here.
