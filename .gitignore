@@ -1,5 +1,7 @@
 # environments and caches
 .venv/
+.pytest_cache/
+.ruff_cache/
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
@@ -7,6 +9,7 @@ __pycache__/
 surveys/
 # heavy outputs; regenerate or copy back with rsync
 code/features/
+code/outputs/
 *.npy
 *.pt
 *.pth

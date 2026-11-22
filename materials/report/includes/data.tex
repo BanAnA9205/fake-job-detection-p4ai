@@ -1,89 +1,115 @@
 \section{Data and preprocessing}
 \label{data}
 
-\subsection{Exploration}
+\subsection{Quality control and related-ad grouping}
 
-Each ad has five free-text fields (title, company profile, description, requirements, benefits),
-categorical metadata (employment type, industry, function, location, required experience and
-education) and three binary flags (telecommuting, company logo, screening questions); real URLs,
-emails and phone numbers are already replaced by hashed placeholders. The exploration (notebook
-\texttt{01}, on the 17,880 raw ads) was used to fix design decisions, listed in
-Table~\ref{tab:eda}; Figure~\ref{fig:eda} shows the main findings. Only 866 ads (4.84\%) are fraudulent
-(panel a), which makes accuracy useless, so we use PR-AUC, choose the decision threshold on
-validation, and weight the loss rather than resample. Many ads repeat (panel b): 281 rows are exact
-duplicates, and 4,552 rows share their description with at least one other row, up to 380 copies
-of one template. Shared descriptions are also more often fraudulent (7.3\% against 4.0\% for unique
-ones), so a random split would let models score by recognising copies; the data must be split by
-description, not by row. Fraudulent descriptions tend to be somewhat shorter (panel c, median 845
-against 1,027 characters), a weak signal that the length features capture. Finally, fraud rates
-vary strongly by country (panel d): Australia reaches 18.7\%, while Greece, Germany and several
-other countries have no fraud at all over hundreds of ads. This is more likely a property of how
-EMSCAD was collected than of the job markets, so we keep the feature but check in
-Section~\ref{explain} how much the models rely on it.
+\textbf{Raw data.} EMSCAD has 17,880 rows, 18 columns and 866 fraudulent ads~\cite{vidros2017}. Each row contains five
+free-text fields, categorical metadata and binary source flags. URLs, emails and phone numbers are
+represented by hashed placeholders. The audit also records missing values, duplicate content and
+class or category support before constructing features.
 
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=0.92\linewidth]{eda_overview.pdf}
-\caption{Exploration of the 17,880 raw ads: (a) class balance; (b) ads by the number of ads sharing
-their description; (c) description length per class, each bin as a share of the class; (d) fraud
-rate for the countries with at least 100 ads (ISO codes; the dashed line is the overall rate).}
-\label{fig:eda}
-\end{figure}
+\textbf{Cleaning.} Spreadsheet errors and other explicit junk markers become missing values.
+Original email and phone identities are extracted for grouping before URL, email and phone
+placeholders are genericized in model text. Deduplication then compares all posting-content columns,
+excluding the row identifier and label, and removes 283 repeated rows after these repairs. No exact
+duplicate block has conflicting labels. The cleaned frame contains 17,597 ads, of which 856
+(4.864\%) are fraudulent.
 
-Missing fields are a signal rather than noise (Figure~\ref{fig:flags}). A company profile is
-missing in 67.8\% of fraudulent ads against 16.0\% of real ones, and fraudulent ads more often lack
-a logo and contain money words or contact details, so we keep a missing-value flag per field
-instead of imputing the gaps away.
+\textbf{Related-ad groups.} Rows are connected when they share an exact whitespace-normalized,
+lowercase description, a nonempty company profile normalized in the same way, or an original email
+or phone identity. Missing descriptions share an empty-description key and are therefore linked,
+whereas empty company profiles receive separate identities and are not linked to one another.
+Connections chain transitively, producing 4,482 groups. URLs are excluded because shared websites
+create large heterogeneous components; consequently, URL identity is outside the split guarantee.
+
+\subsection{Exploratory findings}
+
+\textbf{Class and group structure.} Figure~\ref{fig:eda-overview} shows the cleaned class balance,
+group-size skew and text-length distributions. The largest group contains 723 ads, illustrating why
+individual rows are not independent sampling units. Considering only nonempty fields, median
+description length is 1,011 characters for real ads and 813 for fraudulent ads. Requirement-length
+medians are 566 and 352 characters, also among nonempty fields. These summaries describe EMSCAD and
+do not establish causal fraud signals.
 
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=0.62\linewidth]{eda_flags.pdf}
-\caption{Share of ads in which each flag is set, real versus fraudulent (17,880 raw ads).}
-\label{fig:flags}
+\includegraphics[width=0.96\linewidth]{eda_overview.pdf}
+\caption{Cleaned-data overview: (a) class balance; (b) ads by exact related-group size;
+(c, d) within-class text-length histograms for nonempty fields on logarithmic character scales,
+normalized as \% of nonempty ads in class per bin.}
+\label{fig:eda-overview}
 \end{figure}
+
+\textbf{Presence signals.} A company profile is present in 83.9\% of real ads but only 32.2\% of
+fraudulent ads. Company logos occur in 81.8\% versus 32.9\%, and email placeholders in 6.8\% versus
+20.1\%. Figure~\ref{fig:eda-flags} motivates a small set of length and presence features.
+Requirements, benefits and URL presence differ little between classes, so these three exploratory
+flags are plotted but excluded from the model feature set.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.76\linewidth]{eda_flags.pdf}
+\caption{Candidate presence features by class on the 17,597 cleaned ads. Requirements, benefits
+and URL presence are exploratory candidates; the other seven flags enter structured models.}
+\label{fig:eda-flags}
+\end{figure}
+
+\textbf{Categorical associations.} Figure~\ref{fig:eda-categories} displays the two highest and two
+lowest fraud rates among categories with at least 100 ads. Category support varies, and extreme
+rates can reflect collection procedures or repeated posters. The plot motivates categorical
+encoding, not target-based selection of individual categories.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.98\linewidth]{eda_categories.pdf}
+\caption{Highest and lowest category fraud rates with at least 100 cleaned ads per category.
+Missing categories are labelled explicitly, and the dashed line marks the overall fraud rate.}
+\label{fig:eda-categories}
+\end{figure}
+
+\subsection{Model inputs}
+
+\textbf{Shared text.} Title, company profile, description, requirements and benefits are
+concatenated in that order, with missing fields replaced by empty strings. The classical TF-IDF
+configuration uses English stop words, Unicode accent stripping, sublinear term frequency, word
+unigrams and bigrams, minimum document frequency three, and at most 20,000 features.
+
+\textbf{Structured blocks.} Table~\ref{tab:features} lists the text and structured inputs for the
+classical models and the dense structured block for late fusion. Nominal missing values receive an
+explicit \texttt{missing} category before one-hot encoding. Classical numeric features are
+standardized without centering the sparse matrix, and binary features pass through unchanged. The
+dense fusion preprocessor has the same feature definitions but partition-specific imputation and
+scaling, detailed in Section~\ref{method}.
 
 \begin{table}[htbp]
 \centering
 \small
-\begin{tabular}{>{\raggedright\arraybackslash}p{0.40\linewidth}>{\raggedright\arraybackslash}p{0.52\linewidth}}
+\begin{tabular}{l>{\raggedright\arraybackslash}p{0.61\linewidth}r}
 \toprule
-\textbf{Finding} & \textbf{Decision} \\
+\textbf{Block} & \textbf{Inputs and transformation} & \textbf{Count} \\
 \midrule
-4.84\% of ads are fraudulent. & PR-AUC; threshold chosen on validation; class weights. \\
-281 exact duplicates; 4,552 rows share a description. & Drop duplicates; split by description. \\
-Missing fields are far more common in fraud. & Keep a missing-value flag per field. \\
-Some countries have no fraud over hundreds of ads. & Keep country, check reliance on it. \\
+Text & Word TF-IDF, unigrams and bigrams & up to 20,000 \\
+Nominal & Employment type, experience, education, industry, function; one-hot & 5 columns \\
+Numeric & Description length, requirements length; standardized & 2 \\
+Binary & Telecommuting, logo, questions, profile, salary, email, phone & 7 \\
 \bottomrule
 \end{tabular}
-\caption{Exploration findings and the design decision each one drives.}
-\label{tab:eda}
-\end{table}
-
-\subsection{Preprocessing and splits}
-
-Dropping the exact duplicates leaves 17,599 ads, 856 of them fraudulent, and each ad is assigned
-the hash of its normalised description as its group. \texttt{StratifiedGroupKFold} on these groups
-gives a 60/20/20 train/validation/test split (10,559 / 3,520 / 3,520 ads, with 514 / 171 / 171
-frauds) in which no description appears in two parts. We repeat this for five split seeds and save
-the row indices, so every notebook and machine uses the same rows.
-
-The five text fields are joined into one column, and a \texttt{ColumnTransformer}, fitted on the
-training rows only, builds the feature matrix of Table~\ref{tab:features}. TF-IDF weighs each word
-by how often it occurs in the ad and how rare it is across ads.
-
-\begin{table}[htbp]
-\centering
-\small
-\begin{tabular}{l>{\raggedright\arraybackslash}p{0.55\linewidth}r}
-\toprule
-\textbf{Block} & \textbf{Transformer} & \textbf{Columns} \\
-\midrule
-Text & TF-IDF, word 1- and 2-grams & 20,000 \\
-Metadata & One-hot categories, ordered experience and education levels & 112 \\
-Numeric & Text lengths, exclamation marks, share of capitals (scaled) & 4 \\
-Flags & Logo, questions, telecommuting and 9 engineered flags & 12 \\
-\bottomrule
-\end{tabular}
-\caption{Feature matrix (default settings, seed-0 training rows).}
+\caption{Structured feature blocks. Expanded category counts are learned within each training
+partition or cross-validation fold.}
 \label{tab:features}
 \end{table}
+
+\subsection{Saved grouped partitions}
+
+\textbf{Procedure.} \texttt{StratifiedGroupKFold} creates a 60/20/20 train/validation/test partition
+for each seed from 0 through 4. Every partition has 10,558 training ads and exactly 514 training,
+171 validation and 171 test positives. Seed 3 has 3,520 validation and 3,519 test ads; every other
+seed has 3,519 validation and 3,520 test ads. Saved indices include a content-and-label fingerprint
+so that indices from a different cleaned frame are rejected.
+
+\textbf{Guarantee and boundary.} Checks confirm complete row coverage and no exact related-ad group
+shared by train, validation or test within a partition. The guard does not remove paraphrases,
+near-duplicate templates, source dependence or temporal dependence. Across different seeds, train,
+validation and test rows can overlap, so the partitions are repeated dependent evaluations rather
+than independent replicates. Preprocessors and estimators are fitted on training data, although
+full-data EDA informed the initial feature design.

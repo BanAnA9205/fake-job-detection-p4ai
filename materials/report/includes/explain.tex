@@ -1,18 +1,17 @@
 \section{Explaining the models}
 \label{explain}
 
-\subsection{Logistic regression}
+\subsection{Logistic-regression coefficients}
 
-The largest coefficients of TF-IDF logistic regression (Table~\ref{tab:terms}, seed 0) mix two
-kinds of evidence. Money words (\emph{money}, \emph{income}, \emph{000}) push towards fraud, as the
-exploration suggested, but so does the wording of a few repeated posters: \emph{apply using} occurs
-in 41 ads, 35 of them fraudulent, and the employer name \emph{accion} in 26 ads, 16 of them
-fraudulent. On the real side, the countries Greece and the Philippines appear among the strongest
-features, confirming that the model has partly learned how EMSCAD was collected.
+\textbf{Global view.} Table~\ref{tab:terms} lists the largest positive and negative coefficients
+after refitting the selected structured-LR configuration on seed-0 training rows. Positive terms
+increase the model's fraud log-odds when other feature values are held fixed. Correlated TF-IDF terms
+share weight, so these are associations within one fitted model, not independent or causal effects.
 
 \begin{table}[tb]
 \centering
 \small
+\setlength{\tabcolsep}{4pt}
 \begin{tabular}{lrlr}
 \toprule
 \multicolumn{2}{c}{\textbf{Towards fraud}} & \multicolumn{2}{c}{\textbf{Towards real}} \\
@@ -21,42 +20,55 @@ features, confirming that the model has partly learned how EMSCAD was collected.
 \tabinput{includes/tab_terms}
 \bottomrule
 \end{tabular}
-\caption{Largest coefficients of TF-IDF logistic regression (seed 0).}
+\caption{Largest structured-LR coefficients on seed-0 training rows, ten in each direction.}
 \label{tab:terms}
 \end{table}
 
-\subsection{DistilBERT}
+\textbf{Interpretation.} Money-related words (\emph{money}, \emph{income}, \emph{earn}) coexist with
+placeholder/link phrases such as \emph{link url} and \emph{apply using}. Industry and function terms
+also have large weights. This mixture is consistent with both scam language and dataset-specific
+poster/category patterns; the table alone cannot separate those explanations.
 
-For DistilBERT we used Integrated Gradients~\cite{sundararajan2017} (Captum~\cite{kokhlikyan2020}) on
-ten seed-0 test ads, with an all-\texttt{[PAD]} version of each ad as the reference
-(Table~\ref{tab:ig}). The attributions of each ad add up to its score change from the reference
-(about $\pm 0.5$), as the method guarantees. The clearest scams are pushed by pay amounts and money
-words, the same cues the linear model uses. The most confident false alarms are real part-time,
-data-entry and payroll ads that quote a pay rate, and the missed frauds read like ordinary job
-descriptions. One caught fraud is pushed by the hash EMSCAD put in place of a URL: DistilBERT, like
-the linear model, has partly memorised posters.
+\subsection{Decision-tree importances}
+
+\textbf{Global view.} Table~\ref{tab:tree-terms} reports impurity-based feature importances for the
+selected seed-0 tree. Company-profile presence dominates with importance 0.389, followed by the
+\emph{High School or Equivalent} education category at 0.116 and company-logo presence at 0.037. The strong
+profile effect agrees descriptively with the class-conditional difference in
+Figure~\ref{fig:eda-flags}.
 
 \begin{table}[tb]
 \centering
-\footnotesize
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{llrr>{\raggedright\arraybackslash}p{0.36\linewidth}}
+\small
+\begin{tabular}{lr}
 \toprule
-\textbf{Kind} & \textbf{Title} & \textbf{Score} & \textbf{Sum} & \textbf{Top words towards fraud} \\
+\textbf{Feature} & \textbf{Importance} \\
 \midrule
-\tabinput{includes/tab_ig}
+\tabinput{includes/tab_tree_terms}
 \bottomrule
 \end{tabular}
-\caption{Integrated Gradients for DistilBERT (seed 0): fraud probability, sum of attributions and
-the words with the largest push towards fraud.}
-\label{tab:ig}
+\caption{Ten largest impurity-based feature importances for the selected seed-0 decision tree.}
+\label{tab:tree-terms}
 \end{table}
 
-\subsection{Where the models differ}
+\textbf{Boundary.} Impurity importance describes splits in this training-fitted tree and can favour
+features that offer useful training partitions. It is not a held-out permutation-importance
+estimate. Both classical explanation tables belong to one inspected partition and do not establish
+that the same features transfer to another split, source or time period.
 
-On the 171 seed-0 test frauds, DistilBERT and logistic regression both catch 109, only DistilBERT
-catches 12 and only logistic regression 15, and their scores have a Spearman correlation of just
-0.39: this disagreement is what the stack exploits. The one-class SVM sees the data differently
-again: it is the only model that catches 16 of the test frauds, mostly hotel and call-centre
-vacancies. Only 11 frauds escape every model, all of them IT and engineering postings without a
-single money word, which read like the many real IT ads in the data.
+\subsection{Errors and neural evidence}
+
+\textbf{Classical error inspection.} Notebook \texttt{02} prints the highest-scoring validation false
+alarms and lowest-scoring validation misses for structured LR. Examples are selected on validation
+rather than test errors, separating the displayed cases from test labels.
+
+\textbf{Current neural evidence.} The neural analyses reported here are behavioral comparisons of
+text-only/fused inputs and top-two/full adaptation budgets, plus an input-token coverage audit. No
+neural occlusion, integrated-gradients, attention-attribution or counterfactual explanation analysis
+has been run. Fine-tuning does compute gradients for optimization, but those gradients are not
+reported as token explanations.
+
+\textbf{Interpretation limit.} The fine-tuned CLS state has no direct one-to-one word
+interpretation. The classical coefficients and tree importances are therefore the only global
+feature-attribution artifacts presented, while the paired neural results indicate predictive
+performance, not which linguistic evidence the neural models use.

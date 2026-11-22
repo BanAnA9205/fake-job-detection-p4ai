@@ -10,8 +10,13 @@
 \usepackage[section,above]{placeins} % figures and tables stay inside their own section
 \usepackage{indentfirst}
 
-% Language and fonts (T5 encoding for the Vietnamese names on the cover)
-\usepackage[T5]{fontenc}
+% Language and fonts: T5 for pdfTeX, Unicode fonts for XeTeX/LuaTeX.
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T5]{fontenc}
+\else
+  \usepackage{fontspec}
+\fi
 \usepackage[vietnamese, english]{babel}
 \usepackage[letterspace=500]{microtype} % tracking for \textsc; T5 protrusion metrics are incomplete
 \microtypesetup{protrusion=false}

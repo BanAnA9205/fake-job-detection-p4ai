@@ -9,19 +9,10 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
-import matplotlib
-
-matplotlib.use("Agg")  # tests run headless, no window needed
 import numpy as np
+from modules.eval_helper import evaluate, pick_threshold, score_of
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import LinearSVC
-
-from modules.eval_helper import (
-    compare_table,
-    evaluate,
-    pick_threshold,
-    score_of,
-)
 
 
 def test_score_of_proba_and_decision():
@@ -71,22 +62,17 @@ def test_pick_threshold():
     # Tie in F1: the higher threshold must win (flags fewer rows).
     assert pick_threshold([1, 0, 1, 0], [0.9, 0.5, 0.9, 0.5]) == 0.9
 
-def test_compare_table():
-    tr = evaluate([1, 1, 0, 0], [0.9, 0.8, 0.2, 0.1], thr=0.5)
-    te = evaluate([1, 0], [0.6, 0.4], thr=0.5)
-    tab = compare_table({"m1": {"train": tr, "test": te}})
-    assert list(tab["model"]) == ["m1"]
-    assert np.isclose(tab["gap"].iloc[0], tr["pr_auc"] - te["pr_auc"])
-    for col in ("train_f1", "test_f1", "train_recall", "test_precision"):
-        assert col in tab.columns
 
-
-
-
-
-
-
-
+def test_exact_ratio_tie_prefers_fewer_alerts():
+    # These integer counts reproduce an actual seed-3 tie: 182/273 == 180/270 == 2/3.
+    y = np.array([1] * 171 + [0] * 3349)
+    scores = np.concatenate([
+        np.full(90, 0.9), [0.8], np.zeros(80),
+        np.full(9, 0.95), np.full(2, 0.8), np.zeros(3349 - 11),
+    ])
+    assert evaluate(y, scores, 0.9)["tp"] + evaluate(y, scores, 0.9)["fp"] == 99
+    assert evaluate(y, scores, 0.8)["tp"] + evaluate(y, scores, 0.8)["fp"] == 102
+    assert pick_threshold(y, scores) == 0.9
 
 
 if __name__ == "__main__":

@@ -25,7 +25,7 @@ Take-away for our project: TF-IDF with logistic regression or a linear SVM is th
 - Taneja, Vashishtha and Ratnoo (2025), Fraud-BERT, Discover Computing 28:9 [V, full text read]: fine-tune all BERT-base parameters (learning rate 1e-5, max length 510 tokens, batch size 6, 2 epochs) on one text field built by concatenating 12 columns. They drop `telecommuting`, `has_company_logo`, `has_questions`, `job_id` and `salary_range`. With a single 80:20 split and no resampling they report P 0.94, R 0.92, F1 0.93, accuracy 0.99 and AUC 0.99. Their own baselines on the same split were SVM (P 0.98, R 0.84, F1 0.89), RF (R 0.82, F1 0.88), LR (R 0.70, F1 0.78), Bi-LSTM (F1 0.89) and NB (F1 0.49). SVM took over an hour to train against about 20 minutes for BERT on an A100.
   - Limitations as I read the paper (these are my observations, not the authors' claims): one 80:20 split, no seeds or cross-validation reported, no stratification or validation split described, and no deduplication step described even though the authors say the dataset contains duplicate entries. The authors list the 512-token limit, compute cost and inherited bias as limitations.
 
-Frozen sentence embeddings are a cheaper alternative to fine-tuning. Sentence-BERT (Reimers and Gurevych, EMNLP-IJCNLP 2019, pp. 3982-3992) [V] adapts BERT with siamese networks so that embeddings can be compared directly, and it avoids running a cross-encoder over every pair. Using a frozen encoder with a LR or SVM head mirrors the transfer-learning recipe of our earlier ResNet18 pipeline and Session 7 of the course.
+Frozen pretrained-LM representations are a cheaper alternative to fine-tuning. Sentence-BERT (Reimers and Gurevych, EMNLP-IJCNLP 2019, pp. 3982-3992) [V] adapts BERT with siamese networks so that embeddings can be compared directly, and it avoids running a cross-encoder over every pair. The final project instead uses matched text-only and late-fusion two-logit classifiers for top-two-layer and full DistilBERT fine-tuning, so adaptation budget and structured fusion can be evaluated directly.
 
 The foundational transformer paper is Devlin et al. (2019), BERT, NAACL [M].
 
@@ -34,7 +34,7 @@ The foundational transformer paper is Devlin et al. (2019), BERT, NAACL [M].
 - SMOTE (Chawla et al., JAIR 16, 321-357, 2002) [V] creates synthetic minority examples instead of duplicating existing ones.
 - Saito and Rehmsmeier (PLoS ONE, 2015) [V] argue that ROC plots can give a misleadingly optimistic picture on imbalanced data and that precision-recall plots are more informative.
 
-Amaar et al. (2022) [V, per Taneja et al.] is a concrete example: they evaluated on a resampled test set, so their 99.9% accuracy cannot be compared with results on the natural 4.84% fraud rate. Reported numbers across the ORF papers are not directly comparable. Splits, resampling choices and metrics differ (accuracy, F1, recall and balanced accuracy all appear), and some resample before splitting, which would leak. This is the main justification for our design: one fixed stratified split, resampling and scaling fitted on the training fold only, a majority-class baseline, and precision, recall, F1 and PR-AUC reported together.
+Amaar et al. (2022) [V, per Taneja et al.] is a concrete example: they evaluated on a resampled test set, so their 99.9% accuracy cannot be compared with results on the natural 4.84% fraud rate. Reported numbers across the ORF papers are not directly comparable. Splits, resampling choices and metrics differ (accuracy, F1, recall and balanced accuracy all appear), and some resample before splitting, which would leak. This is the main justification for our design: grouped train/validation/test splits across five saved seeds, preprocessing fitted on training folds only, no resampling, a majority-class baseline, and precision, recall, F1 and AP reported together.
 
 ## 5. Explainability
 
@@ -45,13 +45,13 @@ For a text classifier these show which words drive a "fraudulent" prediction. Fo
 
 ## 6. Gap and positioning
 
-From the sources above (all abstract-level):
+From the sources above (mostly abstract-level, except Fraud-BERT, which was read in full):
 1. Reported results are hard to compare because evaluation protocols differ.
 2. Fine-tuned transformers are reported to do well, but the cost and the gain over a tuned TF-IDF baseline are rarely isolated, and single-split results carry no variance estimate.
 3. In the one paper I read in full (Fraud-BERT), the strong baselines (SVM, RF, LR) are already close to the fine-tuned model in accuracy and the gap is mainly in recall, so a tuned classical baseline deserves a fair test.
-4. Few papers combine a baseline floor, handcrafted-versus-pretrained features, tuning and explanation under one protocol.
+4. Few papers combine a baseline floor, adaptation and fusion ablations, tuning and explanation under one protocol.
 
-Our contribution is a controlled comparison on one protocol: TF-IDF versus frozen sentence embeddings, with linear models and boosted trees, tuned on a validation split, evaluated on a held-out test set with imbalance-appropriate metrics, and explained with SHAP or coefficients. I have not run a search for claims (2) and (3) beyond the papers above, so state them cautiously in the report.
+Our contribution is a focused comparison on one protocol: a majority floor, text-only and structured TF-IDF logistic regression, a decision tree and a one-class SVM, plus matched text-only/late-fusion heads for top-two-layer versus full DistilBERT fine-tuning. The main contrasts are structured-minus-text logistic regression, full-minus-top-two adaptation separately for text and fusion, and fused-minus-text within each adaptation budget. Hyperparameters, epochs and thresholds are selected without test labels within each run; evaluation uses imbalance-appropriate metrics and paired differences across five saved splits. Classical models are inspected with coefficients, tree importances and error examples. Results remain exploratory because EDA informed the design, seed-0 test scores were inspected, partitions overlap, and each neural partition has only one optimization seed. I have not run a search for claims (2) and (3) beyond the papers above, so state them cautiously in the report.
 
 ## References (to verify)
 

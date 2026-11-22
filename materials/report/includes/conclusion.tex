@@ -1,11 +1,26 @@
 \section{Conclusion}
 \label{conclusion}
 
-Under one protocol with five grouped splits, TF-IDF logistic regression (test PR-AUC
-0.821) and a fine-tuned DistilBERT (0.816) are level, and their stack (0.867) beats both on every
-split. A one-class SVM without fraud labels reaches 0.176, far below the supervised models but
-above the 0.049 floor, once its input and kernel width are set properly. The project's lessons are
-to split by description rather than by row, to compare models by PR-AUC split by split, to start
-from a tuned linear baseline, to combine models that make different mistakes, and to read the
-explanations for artefacts of the data. Natural next steps are adding the one-class SVM to the
-stack, removing the country feature, and testing an EMSCAD-trained model on ads from another source.
+\textbf{Main result.} Across five saved grouped partitions, structured TF-IDF logistic regression
+has the highest mean test AP, $0.5928 \pm 0.1651$. Text-only LR remains competitive at
+$0.5762 \pm 0.1875$ AP and has higher mean F1, 0.5301 versus 0.4633. Structured fields are thus a
+small, split-dependent ranking addition rather than a uniform improvement.
+
+\textbf{Neural result.} Full text and full fused achieve mean AP $0.4941$ and $0.5047$, but both lose
+all five paired test-AP comparisons to structured LR.
+
+\textbf{Adaptation and fusion.} Full fine-tuning improves mean AP over top-two tuning by only 0.0245
+for text and 0.0474 for fused inputs, with positive differences on two and three partitions. Late
+structured fusion is unstable across validation and test, including a full-fused-minus-text mean
+test-AP change of $+0.0106$ on only two positive partitions. Neither more trainable parameters nor
+fusion produces a demonstrated neural winner.
+
+\textbf{Methodological result.} Exact related-ad grouping, training-local preprocessing, a majority
+floor, validation-selected epochs and thresholds, saved row scores and paired contrasts expose
+variability that headline accuracy would hide. The seed-2 concentration and truncation audit further
+show why group composition and field survival must accompany aggregate metrics.
+
+\textbf{Next step.} A stronger evaluation should freeze the analysis, repeat several optimization
+seeds within each saved partition, and then evaluate once on an untouched external or
+time/source-split dataset with a prespecified operating rule. Until then, the findings remain
+exploratory and carry no statistical-significance, equivalence or deployment-readiness claim.

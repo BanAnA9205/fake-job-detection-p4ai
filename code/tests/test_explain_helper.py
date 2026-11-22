@@ -11,13 +11,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 
 import numpy as np
 import pandas as pd
-from sklearn.linear_model import LogisticRegression
+from modules.explain_helper import top_linear_terms
 from sklearn.compose import ColumnTransformer
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
-from sklearn.feature_extraction.text import TfidfVectorizer
-
-from modules.explain_helper import show_errors, top_linear_terms
 
 
 def _make_data(n=60, seed=0):
@@ -68,31 +67,6 @@ def test_top_linear_terms():
     big = top_linear_terms(pipe, k=100)
     n_feat = pipe.named_steps["pre"].get_feature_names_out().shape[0]
     assert len(big) == 2 * n_feat
-
-
-def test_show_errors():
-    df = _make_data(n=12)
-    # Hand-made scores: rows 0-4 are labelled 0 but score high (false
-    # positives), rows 5-9 are labelled 1 but score low (false negatives).
-    y_true = [0] * 5 + [1] * 5 + [0, 1]
-    score = [0.9, 0.85, 0.8, 0.75, 0.7, 0.3, 0.25, 0.2, 0.15, 0.1, 0.6, 0.95]
-    out = show_errors(df, y_true, score, thr=0.5, k=3)
-    assert set(out.columns) == {
-        "error_type", "score", "y_true", "title", "description",
-    }
-    fp = out[out["error_type"] == "false_positive"]
-    fn = out[out["error_type"] == "false_negative"]
-    assert len(fp) == 3 and len(fn) == 3
-    # Most confident first: FPs by descending score, FNs by ascending score.
-    assert np.all(np.diff(fp["score"]) < 0)
-    assert np.all(np.diff(fn["score"]) > 0)
-    assert (fp["y_true"] == 0).all() and (fn["y_true"] == 1).all()
-    assert (out["description"].str.len() <= 200).all()
-    assert out["title"].notna().all()
-    # k larger than the number of errors returns all of them:
-    # 6 false positives (rows 0-4 and the tail row labelled 0) plus 5 FNs.
-    all_errs = show_errors(df, y_true, score, thr=0.5, k=50)
-    assert len(all_errs) == 11
 
 
 if __name__ == "__main__":

@@ -1,26 +1,32 @@
 \section{Introduction}
 \label{intro}
 
-Online recruitment fraud is the posting of fake job advertisements, usually to collect money or
-personal data from applicants~\cite{vidros2017}. A job board cannot have every ad read by a
-moderator, so it needs a model that ranks incoming ads by how likely they are to be fake. We study
-this task on EMSCAD~\cite{vidros2017}, 17,880 job ads labelled real or fraudulent by hand. Two
-properties of the data make it harder than it looks: only 4.84\% of the ads are fraudulent, so a
-model that calls every ad real already reaches 95.2\% accuracy, and many ads share their text, so a
-random split puts copies of the same ad in both training and test rows. Published results range
-from 91\% to 99.9\% accuracy, but under different splits, metrics and resampling schemes, and
-usually on a single split~\cite{taneja2025,amaar2022}.
+\textbf{Problem.} Online recruitment fraud uses fake job advertisements to collect money or
+personal data from applicants~\cite{vidros2017}. We study binary fraud detection on the Employment
+Scam Aegean Dataset (EMSCAD). The intended output is a ranking and decision rule that could assist
+moderation, not an automated determination that an advertiser is fraudulent.
 
-We therefore compare models under one protocol that does not leak and that measures the spread
-over several splits. The study centres on three models that see the problem differently: logistic
-regression on TF-IDF features, the standard text baseline; a one-class SVM, which learns only what
-real ads look like and needs no fraud labels; and a fine-tuned DistilBERT transformer. Since
-DistilBERT and logistic regression make different mistakes, we also combine them by stacking.
-The stack is the best model (test PR-AUC 0.867), while logistic regression (0.821) and DistilBERT
-(0.816) are level and the one-class SVM reaches 0.176, above the 0.049 floor.
+\textbf{Challenges.} The raw data contain 17,880 ads but only 866 fraud labels, so an always-real
+rule obtains 95.16\% accuracy with zero fraud recall~\cite{vidros2017}. Repeated descriptions, company profiles and
+contact details also connect related ads. Row-wise splitting can leak these identities into both
+training and test data, while accuracy can conceal failure on the minority class.
 
-Section~\ref{related} reviews earlier work, Section~\ref{data} explores and prepares the data,
-Section~\ref{method} describes the protocol and the models, and Sections~\ref{results}
-to~\ref{conclusion} present, explain and discuss the results. The code is organised as four
-notebooks (EDA, classical models, deep models, analysis) on top of tested modules in
-\texttt{code/modules/}; every number in this report is read from the results they save.
+\textbf{Experiment.} We evaluate nine model variants on five saved, grouped and class-stratified
+partitions. Five classical variants contribute 25 runs. Text-only and structured-fusion variants of
+top-two-layer and full DistilBERT fine-tuning contribute 10 runs each, giving 45 runs with saved
+metrics and row-level scores. All variants retain the natural test prevalence and use validation
+data, not test labels, for model or epoch selection and threshold choice.
+
+\textbf{Main findings.} TF-IDF logistic regression with structured features has the highest mean
+test average precision (AP), $0.5928 \pm 0.1651$, followed by text-only logistic regression at
+$0.5762 \pm 0.1875$. The strongest neural mean is full fine-tuning with structured fusion,
+$0.5047 \pm 0.1696$ AP. Nevertheless, both full-model variants lose to structured logistic
+regression on every paired test-AP comparison. Full-minus-top-two mean AP differences are only
+$+0.0245$ for text and $+0.0474$ for fusion, with improvements on two and three of five splits.
+Fusion is also inconsistent across validation and test partitions.
+
+\textbf{Scope.} These are exploratory comparisons on one dataset, not evidence of statistical
+equivalence or deployment readiness. The five partitions overlap, and each transformer partition
+has one declared optimization seed, so partition and optimization variability are confounded.
+Full-data EDA and inspected seed-0 diagnostics further require a fresh evaluation before any
+confirmatory claim.

@@ -1,65 +1,249 @@
-\section{Results}
+\section{Results and discussion}
 \label{results}
 
-\subsection{Main comparison}
+\subsection{Classical techniques}
 
-Table~\ref{tab:headline} gives the test metrics over the five splits, and Figure~\ref{fig:seeds}
-shows each split separately. The stack is the best model at 0.867, TF-IDF logistic regression and
-DistilBERT are level at 0.821 and 0.816, and the one-class SVM reaches 0.176. Its ROC-AUC of 0.859
-looks close to the supervised models, which shows why PR-AUC is the main metric.
+\subsubsection{Headline comparison and variability}
+
+\textbf{Overall ranking.} Table~\ref{tab:classical-results} compares the classical pipelines over
+five test partitions. Structured LR has the highest mean AP, $0.5928 \pm 0.1651$, followed by
+text-only LR at $0.5762 \pm 0.1875$. Their mean F1 values are $0.4633$ and $0.5301$, so the
+ranking by AP and the choice by thresholded F1 need not agree.
 
 \begin{table}[tb]
 \centering
 \footnotesize
 \setlength{\tabcolsep}{4pt}
-\begin{tabular}{lcccccr}
+\begin{tabular}{lccccr}
 \toprule
-\textbf{Model} & \textbf{PR-AUC} & \textbf{ROC-AUC} & \textbf{F1} & \textbf{Precision} & \textbf{Recall} & \textbf{s/split} \\
+\textbf{Classical model} & \textbf{Test AP} & \textbf{F1} & \textbf{Precision} & \textbf{Recall}
+& \textbf{Seconds/split} \\
 \midrule
-\tabinput{includes/tab_headline}
+\tabinput{includes/tab_classical_results}
 \bottomrule
 \end{tabular}
-\caption{Test metrics over five splits (mean $\pm$ standard deviation). The last column is the
-time per split; DistilBERT ran on a GPU, the other models on a laptop CPU.}
-\label{tab:headline}
+\caption{Classical-model test metrics over five grouped partitions (mean $\pm$ sample standard
+deviation). F1, precision and recall use the validation-selected thresholds, except the majority
+dummy's fixed threshold. These are saved elapsed times, not controlled end-to-end benchmarks.}
+\label{tab:classical-results}
 \end{table}
+
+\textbf{Split variability.} Figure~\ref{fig:seeds} exposes the spread hidden by a mean score. All
+four fine-tuned variants reach only 0.232 to 0.256 AP on seed 2, and several standard deviations in
+Tables~\ref{tab:classical-results} and~\ref{tab:deep-results} exceed the between-family mean gaps.
+One component built by the exact connector rule supplies 101 of the 171 fraud positives in seed-2
+test data. This construction does not confirm that the component is one real-world fraud campaign.
+Its concentration makes a nominal row-level score strongly dependent on one exact related-ad group,
+so it should not be interpreted as 171 independent examples of fraud detection.
 
 \begin{figure}[tb]
 \centering
-\includegraphics[width=0.75\linewidth]{test_pr_auc_seeds.pdf}
-\caption{Test PR-AUC per split. Dots are splits, the bar is the mean, the dashed line the fraud rate.}
+\includegraphics[width=0.94\linewidth]{test_ap_by_seed.pdf}
+\caption{Test AP for each model on five grouped partitions. Points are individual runs, horizontal
+ticks are means and the dashed line is mean fraud prevalence.}
 \label{fig:seeds}
 \end{figure}
 
-The standard deviations of the supervised models (about 0.07) are larger than the gaps between
-them, but every model faces the same five splits, and a hard split is hard for all of them.
-Comparing models split by split cancels this shared difficulty (Table~\ref{tab:paired}).
-DistilBERT and logistic regression are then still level, with DistilBERT winning on one split of
-five, while the stack beats both on every split, by 0.047 and 0.052 on average. Per standard
-deviation of its inputs, the stacker weights logistic regression two to five times more than
-DistilBERT. DistilBERT's validation PR-AUC flattens after its third epoch, so more training would
-not close the gap.
+\textbf{Validation/test behaviour.} Validation and test AP often disagree
+(Figure~\ref{fig:validation-test}). This matters for transformer epoch selection as well as
+classical tuning: a favourable validation trajectory need not transfer to the corresponding test
+partition. Test results are reported for diagnosis and comparison, not used to select a more
+favourable epoch or threshold.
+
+\begin{figure}[tb]
+\centering
+\includegraphics[width=0.65\linewidth]{validation_vs_test_ap.pdf}
+\caption{Validation and test AP for all 45 runs. The dashed line marks equal validation and test AP;
+large departures motivate paired split-level analysis rather than validation-only conclusions.}
+\label{fig:validation-test}
+\end{figure}
+
+\subsubsection{Classical structured-feature ablation}
+
+\textbf{Effect direction.} Structured LR minus text-only LR has mean validation AP $+0.0333$ and
+mean test AP $+0.0165$, with positive test differences on four of five splits. Seed 0 instead
+changes by $-0.0473$. Mean test F1 changes by $-0.0668$ and improves on only one split. The paired
+values in Table~\ref{tab:paired} and Figure~\ref{fig:ablation} therefore support a small,
+split-dependent ranking effect, not a uniform improvement or a single best classical arm.
 
 \begin{table}[tb]
 \centering
-\small
+\scriptsize
+\setlength{\tabcolsep}{3pt}
 \begin{tabular}{lrrrrrrc}
 \toprule
-\textbf{Pair (A $-$ B)} & \textbf{s0} & \textbf{s1} & \textbf{s2} & \textbf{s3} & \textbf{s4} & \textbf{Mean} & \textbf{A wins} \\
+\textbf{Metric difference} & \textbf{s0} & \textbf{s1} & \textbf{s2} & \textbf{s3}
+& \textbf{s4} & \textbf{Mean} & \textbf{Positive} \\
 \midrule
 \tabinput{includes/tab_paired}
 \bottomrule
 \end{tabular}
-\caption{Paired differences in test PR-AUC per split.}
+\caption{Paired structured-LR-minus-text-only-LR differences. The final column counts strictly
+positive changes among five partitions.}
 \label{tab:paired}
 \end{table}
 
-\subsection{One-class SVM}
+\begin{figure}[tb]
+\centering
+\includegraphics[width=0.95\linewidth]{feature_ablation.pdf}
+\caption{Per-partition effect of adding structured features to TF-IDF logistic regression. Positive
+values favour structured features; legends report mean differences.}
+\label{fig:ablation}
+\end{figure}
 
-The fixed one-class SVM chose $\gamma = 30$ on every split and reached a PR-AUC of 0.176, against
-0.057 and a chance-level ROC-AUC of 0.47 for the first version. At its threshold it flags about one test ad in seven and
-catches 56\% of the frauds, with a precision of 0.19, four times the base rate. Its training PR-AUC
-of about 1.0 is not leakage: the local kernel memorises the real training ads it was fitted
-on. A supervised logistic regression on the same text and PCA features reaches a seed-0 validation
-PR-AUC of 0.662 against the one-class SVM's 0.164, so the features hold the signal and what the
-one-class SVM lacks is the labels.
+\subsubsection{Confusion matrices}
+
+\textbf{Seed-0 counts.} Figure~\ref{fig:confusion-classical} complements the classical AP/F1 results
+with raw true-negative, false-positive, false-negative and true-positive counts. The majority dummy
+classifies every ad as real; other panels expose how thresholds alter the error trade-off.
+
+\begin{figure}[tb]
+\centering
+\includegraphics[width=0.98\linewidth]{confusion_classical.pdf}
+\caption{Classical-model confusion matrices on the seed-0 test partition. Rows are actual labels,
+columns are predicted labels, and cells contain TN, FP, FN and TP. Thresholds maximize validation F1,
+except the majority dummy's fixed 0.5 threshold. One partition is diagnostic, not a five-split average.}
+\label{fig:confusion-classical}
+\end{figure}
+
+\subsection{Deep learning techniques}
+
+\subsubsection{Headline comparison}
+
+\textbf{Overall ranking.} Table~\ref{tab:deep-results} compares text-only and structured-fusion
+models under the two fine-tuning budgets. Full fused has the highest mean AP, $0.5047 \pm 0.1696$,
+while full text reaches $0.4941 \pm 0.1645$. Their mean F1 values are $0.4540 \pm 0.2323$ and
+$0.5247 \pm 0.1880$, again showing that AP and thresholded F1 need not select the same arm.
+
+\begin{table}[tb]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lccccr}
+\toprule
+\textbf{Deep-learning model} & \textbf{Test AP} & \textbf{F1} & \textbf{Precision} & \textbf{Recall}
+& \textbf{Seconds/split} \\
+\midrule
+\tabinput{includes/tab_deep_results}
+\bottomrule
+\end{tabular}
+\caption{Deep-learning test metrics over five grouped partitions (mean $\pm$ sample standard
+deviation). F1, precision and recall use each run's validation-selected threshold. Seconds are saved
+elapsed times, not a controlled hardware benchmark.}
+\label{tab:deep-results}
+\end{table}
+
+\textbf{Comparison with structured TF-IDF LR.} Full text and full fused lose all five paired test-AP
+comparisons to structured LR. Their respective mean AP deficits to that model are 0.0987 and 0.0881.
+Full fine-tuning therefore does not outperform the strongest classical model in these paired runs.
+
+\subsubsection{Adaptation budget and structured fusion}
+
+\textbf{Full versus top two.} Table~\ref{tab:adaptation} reports paired full-minus-top-two changes.
+Mean test AP increases by $+0.0245$ for text, with improvements on two splits, and by $+0.0474$ for
+fusion, with improvements on three. The corresponding validation means are $+0.0745$ and $+0.0180$.
+Updating the whole encoder therefore has small and inconsistent test benefits despite substantial
+variation in individual splits.
+
+\begin{table}[tb]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrcc}
+\toprule
+\textbf{Arm} & \textbf{Validation $\Delta$AP} & \textbf{Test $\Delta$AP}
+& \textbf{Test $\Delta$F1} & \textbf{Test AP wins} & \textbf{Test F1 wins} \\
+\midrule
+\tabinput{includes/tab_adaptation}
+\bottomrule
+\end{tabular}
+\caption{Paired full-minus-top-two differences over five partitions. Positive values and wins favour
+full fine-tuning. Win columns report test partitions with strictly positive changes.}
+\label{tab:adaptation}
+\end{table}
+
+\textbf{Late fusion.} Fusion effects also reverse between validation and test
+(Table~\ref{tab:fusion}). For top-two tuning, mean validation AP rises by 0.0307 on all five splits,
+but mean test AP falls by 0.0123 and rises on only two. For full tuning, fused-minus-text mean test
+AP is $+0.0106$ with only two positive splits, while mean validation AP changes by $-0.0258$.
+Full-model fusion also reduces mean test F1 by 0.0707. No stable fusion gain is established.
+
+\begin{table}[tb]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrcc}
+\toprule
+\textbf{Strategy} & \textbf{Validation $\Delta$AP} & \textbf{Test $\Delta$AP}
+& \textbf{Test $\Delta$F1} & \textbf{Test AP wins} & \textbf{Test F1 wins} \\
+\midrule
+\tabinput{includes/tab_fusion}
+\bottomrule
+\end{tabular}
+\caption{Paired fused-minus-text differences for each adaptation strategy. Positive values and wins
+favour structured late fusion.}
+\label{tab:fusion}
+\end{table}
+
+\begin{figure}[tb]
+\centering
+\includegraphics[width=0.95\linewidth]{adaptation_ablation.pdf}
+\caption{Paired full-minus-top-two AP differences for text-only and structured-fusion arms on
+validation and test partitions. Positive values favour full encoder fine-tuning; legends report means.}
+\label{fig:adaptation-ablation}
+\end{figure}
+
+\textbf{Saved run time.} Full text and full fused average approximately 155.0 and 155.7 seconds per
+partition, compared with 106.4 and 107.2 seconds for the corresponding top-two runs. These records
+describe the observed runs, not a controlled efficiency comparison; no common hardware benchmark
+measures end-to-end development or serving cost across every family.
+
+\subsubsection{Token coverage and operating points}
+
+\textbf{Truncation audit.} On seed-0 training data, the 512-token cap covers 53.12\% of real and
+88.72\% of fraud documents. The mean removed-token fraction over every document, assigning zero
+removal to documents within the cap, is 13.10\% for real and 2.86\% for fraud ads. In the
+approximate sequential field
+audit among nonempty field entries, mean real-token survival is 68.05\% for requirements and 49.25\% for benefits, compared with
+92.21\% and 92.58\% for fraud ads. Late-field loss is consequently class-dependent and descriptive,
+not evidence that the removed text causes prediction errors.
+
+\textbf{Thresholded profiles.} Figure~\ref{fig:metrics} separates precision, recall and F1 rather
+than reducing every model to AP. Each threshold maximizes validation F1 independently, and wide F1
+variation shows that this operating rule transfers unevenly across partitions.
+
+\begin{figure}[tb]
+\centering
+\includegraphics[width=0.88\linewidth]{metric_profile.pdf}
+\caption{Mean test precision, recall and F1 at validation-selected thresholds over five partitions.}
+\label{fig:metrics}
+\end{figure}
+
+\textbf{Seed-0 curves.} Figure~\ref{fig:pr-curves} gives a score-level view for one already inspected
+partition. It is a diagnostic illustration, not a basis for model selection; the means and paired
+contrasts above carry the comparative evidence.
+
+\begin{figure}[tb]
+\centering
+\includegraphics[width=0.86\linewidth]{pr_curves_seed0.pdf}
+\caption{Seed-0 test precision-recall curves for the primary subset of six models: structured LR,
+text-only LR, top-two text/fusion and full text/fusion. The dashed line is test fraud prevalence on
+that partition.}
+\label{fig:pr-curves}
+\end{figure}
+
+\subsubsection{Confusion matrices}
+
+\textbf{Seed-0 counts.} Figure~\ref{fig:confusion-deep} shows the corresponding raw error counts for
+all four fine-tuned variants. The panels compare false-alarm and missed-fraud trade-offs across
+adaptation budgets and input types.
+
+\begin{figure}[tb]
+\centering
+\includegraphics[width=0.98\linewidth]{confusion_deep.pdf}
+\caption{Deep-learning confusion matrices on the seed-0 test partition. Rows are actual labels,
+columns are predicted labels, and cells contain TN, FP, FN and TP. Every threshold is selected on
+validation F1 only. These seed-0 counts are diagnostic and do not select a model or summarize all
+five partitions.}
+\label{fig:confusion-deep}
+\end{figure}

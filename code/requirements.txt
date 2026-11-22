@@ -1,23 +1,22 @@
-# Core (everything in modules/ except the DistilBERT parts needs only these).
-# Tested with: Python 3.14.7, numpy 2.5.4, pandas 3.1.1, scipy 1.18.1,
-# scikit-learn 1.9.1, matplotlib 3.11.2, seaborn 0.13.2, joblib 1.6.0.
+# Core modules and every lightweight notebook step.
+# Tested with: Python 3.12.15, numpy 2.5.5, pandas 3.1.1, scipy 1.18.1,
+# scikit-learn 1.9.1, matplotlib 3.11.2, joblib 1.6.0.
 # Lower bounds below come from the APIs the code uses, NOT from testing on older versions:
-#   scikit-learn >= 1.3  (LinearSVC dual="auto"); also needs OneHotEncoder sparse_output and
-#                        handle_unknown="infrequent_if_exist", HistGradientBoosting class_weight (all <= 1.3)
+#   scikit-learn >= 1.3  (LinearSVC dual="auto", OneHotEncoder sparse_output);
+#   newer versions are also supported and are what the current environment uses.
 numpy>=1.24
 pandas>=2.0
 scipy>=1.10
 scikit-learn>=1.3
 matplotlib>=3.7
-seaborn>=0.12
 joblib>=1.3
 
-# Notebook (only if you build/run the notebook)
+# Notebook execution
 nbformat>=5.9
 jupyter
 
-# Optional, only for the deep-learning modules (GPU server only, never the laptop).
-# Not installed in the local .venv and never run locally.
+# Optional DistilBERT fine-tuning (GPU server only).
+# Classical and artifact-analysis pipelines can run without these deep-learning packages.
 # torch
 # transformers
-# captum          (Integrated Gradients for the DistilBERT explanation)
+# safetensors

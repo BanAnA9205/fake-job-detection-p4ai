@@ -1,24 +1,67 @@
-\section{Discussion}
+\subsection{Discussion}
 \label{discussion}
 
-Word counts most likely match a pretrained transformer here because much of the fraud signal in
-EMSCAD lies in exact words: pay amounts, a few posters' templates, employer names and
-hashed placeholders. A sparse linear model learns such words from a handful of the 514 training
-frauds, whereas DistilBERT reads only 256 tokens and represents meaning, which helps on new
-wording but adds little where a known phrase decides. The transformer is therefore most useful as
-a second opinion, as the stack shows.
+\subsubsection{Interpreting the contrasts}
 
-The one-class SVM shows two sides of the data. Judged against the bulk of the real ads, frauds look
-typical, because many are repeated templates in dense regions of the text space; judged by their
-nearest real neighbours, they stand out. Its PR-AUC of 0.176 against 0.662 for a supervised model
-on the same features shows that labels remain essential, but it catches frauds that every
-supervised model misses, so it could serve as an extra signal for moderators or a third input to
-the stack.
+\textbf{TF-IDF advantage.} One plausible explanation is that repeated EMSCAD templates and strong
+lexical cues suit a high-dimensional sparse model, while right truncation can remove late fields.
+These are mechanisms for further controlled tests, not causes demonstrated by the present scores.
+The full models still do not surpass structured LR in paired test AP.
 
-These conclusions have limits. All results come from one dataset, and the country and poster
-artefacts mean the numbers would not transfer unchanged to another job board. The supervised
-models had a small tuning budget (4 candidates per split). DistilBERT chooses its best epoch and
-its threshold on the same validation rows that the stacker is fitted on, so its validation scores
-are slightly optimistic, although the test rows were never used for any choice. The five splits
-reuse the same ads, so the standard deviations measure sensitivity to the split, and the
-explanations cover a few ads from one split.
+\textbf{Adaptation value.} Full-minus-top-two AP gains are small relative to their split variability
+and are positive on only two or three partitions. The roughly 48-second difference in saved mean run
+time does not resolve whether additional trainable parameters are worthwhile, because quality is
+inconsistent and the timing was not a controlled end-to-end benchmark. Top-two tuning also uses a
+different, cheaper adaptation budget, not a statistically established equivalent model.
+
+\textbf{Fusion trade-off.} Structured fields add information that need not be present in truncated
+text, but fusion changes both ranking and the validation-selected decision threshold. Top-two fusion
+improves validation AP on all five splits yet lowers mean test AP, while full fusion changes mean
+test AP by only $+0.0106$. The evidence therefore does not justify calling structured fusion a neural
+improvement. The classical structured ablation likewise separates a small AP gain from lower F1.
+
+\textbf{Dependence and thresholds.} The 101 positive rows in the seed-2 test exact-connector
+component show how a large group can dominate a nominal 171-positive evaluation. Group-disjoint
+fitting prevents that component from crossing a partition boundary, but all its rows still
+contribute together to one test metric. Validation/test reversals and wide F1 deviations also show
+that a threshold chosen by validation F1 does not guarantee a stable operating point.
+
+\textbf{One-class objective.} One-class SVM learns a boundary around known-real training examples,
+not a fraud ranking objective. Fraudulent ads can resemble ordinary vacancies or form dense
+templates, while unusual real ads need not be fraudulent. AP near prevalence and low precision are
+therefore compatible with the method's objective and do not by themselves diagnose leakage.
+
+\subsubsection{Validity and limitations}
+
+\textbf{Grouping guarantee.} The exact rule blocks shared normalized descriptions, company profiles,
+emails and phone identities across partitions. It does not guarantee separation of fuzzy duplicates,
+paraphrased campaigns, employers, URLs, data sources or collection periods. No temporal, source-held
+or external-dataset evaluation is available, so the reported estimand is limited to these saved
+same-dataset grouped partitions.
+
+\textbf{Selection history.} Full cleaned-data EDA informed feature design, and seed-0 test scores,
+curves and explanations were inspected during development. Model fitting and threshold selection do
+not read test labels, but this later inspection can influence reported choices. The results are thus
+exploratory rather than a pristine confirmatory evaluation.
+
+\textbf{Replication and inference.} The five partitions reuse and overlap the same 17,597 ads, and
+rows within an exact related-ad group remain dependent. Means, sample standard deviations and win
+counts are descriptive across selected resamplings, not five independent replicates. No statistical
+significance, statistical equivalence or population-level superiority is claimed.
+
+\textbf{Optimization confounding.} Transformer runs use one declared optimization seed per partition.
+The same index changes both data assignment and optimization conditions, so observed variation
+mixes split and seed sensitivity. Repeated optimization seeds on unchanged partitions are required
+to estimate those components separately. Classical tuning instead uses compact grids, so the search
+procedures are not matched across model families.
+
+\textbf{Input and operating limits.} Fine-tuning truncates at 512 tokens. Measured class-dependent
+field loss makes this a material limitation, but the audit does not quantify the predictive value of
+removed tokens. Scores are not calibrated probabilities, thresholds are validated on a small and
+partition-dependent sample, and no review capacity, false-alarm cost, abstention or human-moderation
+study establishes deployment readiness.
+
+\textbf{Data and runtime limits.} EMSCAD categories, placeholders and lexical patterns may reflect
+one platform and historical collection process, so transfer to another board, language, fraud rate
+or time period is unknown. Saved timings were not collected under a controlled common hardware
+protocol and cannot support an end-to-end efficiency or deployment-cost ranking.

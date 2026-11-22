@@ -1,22 +1,33 @@
 \section{Related work}
 \label{related}
 
-Vidros et al.~\cite{vidros2017} introduced EMSCAD and classified it with bag-of-words features and
-standard classifiers, on a balanced subset of the data. Most later studies combine text features
-with meta-features such as a missing company profile and use linear, tree or ensemble classifiers;
-Taneja et al.~\cite{taneja2025} list ten of them with 91\% to 99.9\% accuracy, including one measured
-on a resampled test set~\cite{amaar2022}. Transformers have since been applied to the same data:
-Akram et al.~\cite{akram2024} fine-tune BERT~\cite{devlin2019} and RoBERTa with SMOTE oversampling,
-and Fraud-BERT~\cite{taneja2025} reports F1 0.93 against 0.78 for logistic regression, on one 80:20
-split without deduplication or seeds.
+\textbf{Classical detection.} Vidros et al.~\cite{vidros2017} introduced EMSCAD and evaluated
+bag-of-words classifiers on a curated balanced subset. Later studies combine text with posting
+metadata and linear, tree or ensemble classifiers. Their headline scores are not directly comparable
+with natural-prevalence evaluation. For example, the 99.9\% accuracy associated with Amaar et
+al.~\cite{amaar2022} was measured on a resampled test set rather than the original fraud rate.
 
-Two further results shape our protocol. Oversampling such as SMOTE~\cite{chawla2002} is
-legitimate during training but makes test numbers meaningless when applied to the test set, and
-precision-recall curves are more informative than ROC curves when negatives
-dominate~\cite{saito2015}. For explaining a neural model, Integrated
-Gradients~\cite{sundararajan2017} attributes a prediction to the input tokens, with the guarantee
-that the attributions add up to the change in output from a neutral reference input.
+\textbf{Transformer detection.} BERT supports both feature-based transfer and task
+fine-tuning~\cite{devlin2019}. Akram et al.~\cite{akram2024} study BERT and RoBERTa with SMOTE
+variants on an expanded multi-source corpus. Fraud-BERT~\cite{taneja2025} reports macro F1 0.93 for
+full BERT fine-tuning on one 80:20 EMSCAD row split, but does not document deduplication or repeated
+optimization seeds. Different data sources, prevalence, split rules and metric averaging preclude
+placing those scores and ours in one leaderboard.
 
-Taken together, EMSCAD results are hard to compare, rarely report their spread over splits, and
-rarely isolate what a fine-tuned transformer adds over a tuned word-count baseline. This project
-fixes one protocol and puts every model through it.
+\textbf{Adaptation choices.} DistilBERT provides a smaller distilled transformer~\cite{sanh2019},
+but its original efficiency results do not establish superiority on job-fraud detection. We compare
+fine-tuning only the last two encoder layers with a two-logit head against updating the full encoder
+and head. Each adaptation budget has a text-only arm and a structured late-fusion arm.
+
+\textbf{Imbalance and evaluation.} SMOTE~\cite{chawla2002} can alter a training sample, but changing
+test prevalence changes the operating problem. We do not resample. Average precision and
+precision-recall curves receive more attention than accuracy because precision-recall analysis is
+more informative when negatives dominate~\cite{saito2015}. Thresholded precision, recall and F1 are
+reported separately because a better ranking need not produce a better validation-selected
+operating point.
+
+\textbf{Positioning.} The project contributes a common exploratory protocol for simple TF-IDF
+baselines, selective fine-tuning, full fine-tuning and late structured fusion. Exact-ad group
+separation, saved scores and paired per-split differences are central to that comparison. The aim is
+to identify stable and unstable effects, not to propose a new architecture or claim state-of-the-art
+performance.

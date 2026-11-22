@@ -1,4 +1,4 @@
-"""Loading, auditing, cleaning and splitting the fake job postings data."""
+"""Loading, cleaning, and grouped splitting for the fake job postings data."""
 
 import hashlib
 import os
@@ -6,9 +6,8 @@ import random
 
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import StratifiedGroupKFold
-
 from modules import qc
+from sklearn.model_selection import StratifiedGroupKFold
 
 TARGET = "fraudulent"
 
@@ -43,72 +42,26 @@ def _content_cols(df):
     return [c for c in df.columns if c not in ("job_id", TARGET)]
 
 
-def _normalise_text(text):
-    """Lowercase, trim and collapse whitespace so cosmetic edits compare equal."""
-    if pd.isna(text):
-        return ""
-    return " ".join(str(text).split()).lower()
-
-
-def _count_duplicate_conflicts(df):
-    """Count duplicate blocks (same content apart from job_id) that disagree on the label."""
-    cols = _content_cols(df)
-    blocks = df[df.duplicated(subset=cols, keep=False)]
-    if blocks.empty:
-        return 0
-    labels = blocks.groupby(cols, dropna=False)[TARGET].nunique()
-    return int((labels > 1).sum())
-
-
-def audit(df):
-    """Summarise shape, class balance, missingness and duplicate structure."""
-    cols = _content_cols(df)
-    y = df[TARGET]
-    desc_counts = df["description"].map(_normalise_text).value_counts()
-    return {
-        "shape": [int(df.shape[0]), int(df.shape[1])],
-        "class_counts": {0: int((y == 0).sum()), 1: int((y == 1).sum())},
-        "positive_rate": round(float(y.mean()), 6),
-        "missing_rate": {c: round(float(df[c].isna().mean()), 6) for c in df.columns},
-        "n_duplicate_rows": int(df.duplicated(subset=cols, keep="first").sum()),
-        "n_rows_shared_description": int(desc_counts[desc_counts > 1].sum()),
-        "n_conflicting_duplicate_groups": _count_duplicate_conflicts(df),
-    }
-
-
-def _fix_text(s):
-    """Junk cells become missing, hashed placeholders become generic, glued boundaries get a space."""
-    s = s.where(~s.astype(str).str.strip().isin(qc.JUNK_VALUES))
-    s = s.str.replace(qc.PLACEHOLDER, r"#\1", regex=True)         # "#URL_3f9a..#" -> "#URL#"
-    s = s.str.replace(qc.GLUE_SENTENCE, r"\1\2 \3", regex=True)
-    return s.str.replace(qc.GLUE_WORD, r"\1 \2", regex=True)
-
-
 def clean(df):
-    """Fix the text, drop exact duplicate postings, check labels agree, and tag split groups.
-
-    Text: Excel errors and filler become missing, each hashed link/email/phone placeholder becomes
-    a generic one (a model should learn "has a phone number", not one number), and sentences glued
-    together by removed HTML are separated. Groups: see qc.group_ids.
-    """
+    """Repair clear defects, remove exact duplicates and single-value fields, and tag groups."""
     out = df.copy()
+    contacts = qc.contact_keys(out, TEXT_COLS)
     for col in TEXT_COLS + ["department"]:
-        out[col] = _fix_text(out[col])
+        text = out[col].where(~out[col].astype(str).str.strip().isin(qc.JUNK_VALUES))
+        out[col] = text.str.replace(qc.PLACEHOLDER, r"#\1", regex=True)
 
-    # Duplicates with conflicting labels would make "keep the first" hide a real label error.
-    conflicts = _count_duplicate_conflicts(out)
+    content_cols = _content_cols(out)
+    blocks = out[out.duplicated(subset=content_cols, keep=False)]
+    conflicts = 0 if blocks.empty else int(
+        (blocks.groupby(content_cols, dropna=False)[TARGET].nunique() > 1).sum()
+    )
     assert conflicts == 0, f"{conflicts} duplicate blocks disagree on {TARGET}; review the data"
 
-    # Drop exact duplicates (ignoring job_id), then tag each row with its split group.
-    out = out.drop_duplicates(subset=_content_cols(out), keep="first").reset_index(drop=True)
-    out["group"] = qc.group_ids(out)
-    return out
-
-
-def save_processed(df, path=PROCESSED):
-    """Write the cleaned frame (gzip CSV; mtime=0 keeps the file identical across runs)."""
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    df.to_csv(path, index=False, compression={"method": "gzip", "mtime": 0})
+    out = out.drop_duplicates(subset=content_cols, keep="first")
+    contacts = contacts.loc[out.index].reset_index(drop=True)
+    out = out.reset_index(drop=True)
+    out["group"] = qc.group_ids(out, contacts)
+    return out.drop(columns=qc.single_value_columns(out))
 
 
 def load_processed(path=PROCESSED):
@@ -129,7 +82,7 @@ def _check_splits(splits, y, groups):
     stacked = np.concatenate([splits[n] for n in names])
     assert np.array_equal(np.sort(stacked), np.arange(len(y))), "splits must cover every row once"
 
-    # No leakage: no group (shared description, company or near-copy) sits in two splits.
+    # No leakage: no group (shared exact text or original contact identity) crosses splits.
     for i, a in enumerate(names):
         for b in names[i + 1:]:
             shared = set(groups[splits[a]]) & set(groups[splits[b]])
@@ -192,13 +145,18 @@ def load_splits(path, df):
 
 
 def _fingerprint(df):
-    """Short hash of the ordered job_ids and their groups.
+    """Hash split-relevant raw content so stale indices are rejected after data edits."""
+    raw_cols = TEXT_COLS + CAT_COLS + BIN_COLS + [
+        "location", "department", "salary_range", "job_id", "group", TARGET,
+    ]
+    cols = [c for c in raw_cols if c in df]
+    values = pd.util.hash_pandas_object(df[cols], index=False).to_numpy().tobytes()
+    return hashlib.sha256(",".join(cols).encode() + values).hexdigest()[:16]
 
-    It changes if rows are dropped, added or reordered, or if the grouping changes, so splits made
-    under an older grouping are refused instead of silently reused.
-    """
-    ids = ",".join(f"{j}:{g}" for j, g in zip(df["job_id"], df["group"]))
-    return hashlib.sha256(ids.encode("utf-8")).hexdigest()[:16]
+
+def data_fingerprint(df):
+    """Return the cleaned-content fingerprint saved in split files and result lineage."""
+    return _fingerprint(df)
 
 
 def seed_everything(seed):

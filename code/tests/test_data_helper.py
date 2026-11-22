@@ -17,13 +17,11 @@ from modules.data_helper import (
     BIN_COLS,
     CAT_COLS,
     TEXT_COLS,
-    audit,
     clean,
-    load_raw,
     load_processed,
+    load_raw,
     load_splits,
     make_splits,
-    save_processed,
     save_splits,
     seed_everything,
 )
@@ -99,31 +97,6 @@ def test_load_raw():
         expect_error(AssertionError, lambda: load_raw(path))
 
 
-def test_audit():
-    frame = make_frame()
-    duplicate = frame.loc[[0]].copy()
-    duplicate["job_id"] = 9000
-    frame = pd.concat([frame, duplicate], ignore_index=True)
-    info = audit(frame)
-    assert info["shape"] == [201, 18]
-    assert info["class_counts"] == {0: 160, 1: 41}
-    assert abs(info["positive_rate"] - 41 / 201) < 1e-5
-    assert info["n_duplicate_rows"] == 1
-    assert info["n_conflicting_duplicate_groups"] == 0
-    assert info["n_rows_shared_description"] == 201
-    assert info["missing_rate"]["department"] == 1.0
-    assert info["missing_rate"]["title"] == 0.0
-    assert len(info["missing_rate"]) == 18
-
-    pair = frame.loc[[5, 5]].copy()
-    pair["job_id"] = [9001, 9002]
-    pair["fraudulent"] = [0, 1]
-    conflicted = pd.concat([frame, pair], ignore_index=True)
-    info = audit(conflicted)
-    assert info["n_conflicting_duplicate_groups"] == 1
-    assert info["class_counts"] == {0: 161, 1: 42}
-
-
 def test_clean_drops_duplicates_and_hashes_groups():
     frame = make_frame()
     duplicate = frame.loc[[0]].copy()
@@ -135,8 +108,11 @@ def test_clean_drops_duplicates_and_hashes_groups():
     assert "group" in cleaned.columns
     assert cleaned["group"].nunique() == 20
     assert cleaned["group"].notna().all()
-    assert cleaned["department"].isna().all()  # clean does not impute
-    assert cleaned["employment_type"].tolist() == ["Full-time"] * 200
+    assert "department" not in cleaned  # all-missing fields are removed during QC
+    assert "has_company_logo" not in cleaned  # all-one fields are removed too
+    assert "has_questions" not in cleaned
+    assert "employment_type" not in cleaned  # a uniform category is removed as well
+    assert cleaned["telecommuting"].nunique() == 2  # variable flags are retained
     again = clean(frame)
     assert again["group"].tolist() == cleaned["group"].tolist()
 
@@ -154,11 +130,11 @@ def test_clean_fixes_text():
     frame = make_frame(n_groups=1, per_group=3, pos_per_group=1)
     frame.loc[0, "requirements"] = "#NAME?"
     frame.loc[1, "description"] = "Mail #EMAIL_3a1e#PHONE_ad7b## today.We reply"
-    frame.loc[2, "description"] = "Corporate overviewAker builds rigs"
+    frame.loc[2, "description"] = "Corporate overviewAker uses JavaScript"
     out = clean(frame)
     assert pd.isna(out.loc[0, "requirements"])
-    assert out.loc[1, "description"] == "Mail #EMAIL#PHONE## today. We reply"
-    assert out.loc[2, "description"] == "Corporate overview Aker builds rigs"
+    assert out.loc[1, "description"] == "Mail #EMAIL#PHONE## today.We reply"
+    assert out.loc[2, "description"] == "Corporate overviewAker uses JavaScript"
 
 
 def test_clean_handles_missing_description():
@@ -195,7 +171,7 @@ def test_make_splits():
         for b in names[i + 1:]:
             assert not set(groups[splits[a]]) & set(groups[splits[b]])
     y = cleaned["fraudulent"].to_numpy()
-    for name, idx in splits.items():
+    for idx in splits.values():
         assert abs(y[idx].mean() - y.mean()) <= 0.01
     same = make_splits(cleaned, seed=0)
     assert all(np.array_equal(splits[k], same[k]) for k in splits)
@@ -219,12 +195,13 @@ def test_save_load_processed_roundtrip():
     cleaned = clean(make_frame())
     with tempfile.TemporaryDirectory() as tmp:
         path = os.path.join(tmp, "sub", "clean.csv.gz")
-        save_processed(cleaned, path)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        cleaned.to_csv(path, index=False, compression={"method": "gzip", "mtime": 0})
         back = load_processed(path)
-        # Same values (None and NaN both mean missing); an all-empty column comes back as text.
+        # Same values; None and NaN both mean missing.
         same = lambda d: d.astype(object).where(d.notna(), "<missing>").astype(str)
         pd.testing.assert_frame_equal(same(back), same(cleaned))
-        assert back["department"].isna().all() and str(back["department"].dtype) == "str"
+        assert "department" not in back
         expect_error(AssertionError, lambda: load_processed(os.path.join(tmp, "missing.csv.gz")))
 
 
@@ -239,6 +216,19 @@ def test_save_load_splits_roundtrip():
         changed = cleaned.iloc[1:].reset_index(drop=True)
         expect_error(AssertionError, lambda: load_splits(path, changed))
     assert all(np.array_equal(splits[k], loaded[k]) for k in ("train", "val", "test"))
+
+
+def test_split_fingerprint_rejects_label_or_content_changes():
+    cleaned = clean(make_frame())
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "splits.npz")
+        save_splits(path, {"train": np.array([0]), "val": np.array([1]), "test": np.array([2])}, cleaned)
+        changed = cleaned.copy()
+        changed.loc[0, "fraudulent"] = 1 - changed.loc[0, "fraudulent"]
+        expect_error(AssertionError, lambda path=path, changed=changed: load_splits(path, changed))
+        changed = cleaned.copy()
+        changed.loc[0, "requirements"] = "changed text"
+        expect_error(AssertionError, lambda path=path, changed=changed: load_splits(path, changed))
 
 
 def test_seed_everything():

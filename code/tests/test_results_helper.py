@@ -7,8 +7,14 @@ import tempfile
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 import numpy as np
-
-from modules.results_helper import load_results, load_scores, result_exists, save_result
+import pytest
+from modules.results_helper import (
+    assert_result_lineage,
+    load_results,
+    load_scores,
+    result_exists,
+    save_result,
+)
 
 METRICS = {"precision": 0.5, "recall": 0.25, "f1": 1 / 3, "tp": 1, "fp": 1, "fn": 3, "tn": 5,
            "pr_auc": 0.4, "roc_auc": 0.7}
@@ -33,6 +39,29 @@ def test_load_results_empty_folder_and_two_folders():
     save_result(a, "x", "classical", 0, 0.5, METRICS, METRICS, [0], [0.1], [0], [0.1])
     save_result(b, "y", "deep", 0, 0.5, METRICS, METRICS, [0], [0.1], [0], [0.1])
     assert sorted(load_results(a, b)["model"]) == ["x", "y"]
+
+
+def test_lineage_round_trip_and_stale_resume_rejection():
+    d = tempfile.mkdtemp()
+    save_result(
+        d, "m", "classical", 3, 0.5, METRICS, METRICS,
+        [0, 1], [0.1, 0.9], [1, 0], [0.8, 0.2],
+        data_fingerprint="cleaned-v1", val_indices=[5, 1], test_indices=[4, 0],
+    )
+    expected = {"data_fingerprint": "cleaned-v1"}
+    scores = load_scores(d, "m", 3)
+    assert scores["val_indices"].tolist() == [5, 1]
+    assert scores["test_indices"].tolist() == [4, 0]
+    assert_result_lineage(expected, scores, "cleaned-v1", [5, 1], [4, 0])
+    assert result_exists(d, "m", 3, "cleaned-v1", [5, 1], [4, 0])
+
+    # Different text/model rows can retain the same labels and row order, so labels alone are insufficient.
+    with pytest.raises(ValueError, match="different cleaned data"):
+        result_exists(d, "m", 3, "cleaned-v2", [5, 1], [4, 0])
+    with pytest.raises(ValueError, match="test_indices"):
+        result_exists(d, "m", 3, "cleaned-v1", [5, 1], [0, 4])
+    with pytest.raises(ValueError, match="different cleaned data"):
+        assert_result_lineage({}, scores, "cleaned-v1", [5, 1], [4, 0])
 
 
 if __name__ == "__main__":

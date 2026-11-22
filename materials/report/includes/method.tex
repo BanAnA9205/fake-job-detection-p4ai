@@ -1,42 +1,103 @@
 \section{Method}
 \label{method}
 
-\subsection{Evaluation protocol}
+\subsection{Scope and targeted contrasts}
 
-Every model is fitted on the training rows, makes all its choices (hyper-parameters, epochs,
-threshold) on the validation rows, and is scored once on the test rows, on each of the five
-splits. Hyper-parameters are tuned by PR-AUC with 3-fold grouped cross-validation inside the
-training rows. The main metric is PR-AUC, which measures how well frauds are ranked above real ads
-and whose floor is the fraud rate (0.049); ROC-AUC is also reported, but it counts the plentiful
-true negatives and flatters weak models~\cite{saito2015}. Precision, recall and F1 are measured at
-the threshold that maximises F1 on validation. A majority dummy, which calls every ad real, fixes
-the floor.
+\textbf{Design choices.} These comparisons are targeted ablations, not a model zoo. The majority
+dummy is the floor, LR is a strong supervised baseline, the tree is a limited nonlinear contrast,
+and one-class SVM is a limited unlabeled-detection probe. The same DistilBERT base isolates
+adaptation budget and metadata effects. The core contrasts are structured LR minus text LR,
+full-minus-top-two separately for text and fusion, and fused-minus-text within each adaptation
+budget. An auxiliary frozen-head branch was removed because it was not central to genuine
+fine-tuning, and its pooling, token ceiling and classifiers prevented an exact control comparison.
+Other architectures are outside scope, not declared inferior.
 
-\subsection{Models}
+\subsection{Evaluation and selection semantics}
 
-\textbf{TF-IDF logistic regression} gives every feature its own weight, trains in about a minute
-and can be read through its coefficients. Class weights make a missed fraud cost about 20 false
-alarms, and the regularisation strength, vocabulary size and n-gram range are tuned.
+\textbf{Metrics.} The primary metric is scikit-learn average precision (AP)~\cite{sklearn_ap}, computed from scores
+sorted in decreasing order as
+\begin{equation}
+\mathrm{AP}=\sum_{k=1}^{n}(R_k-R_{k-1})P_k,
+\end{equation}
+where $P_k$ and $R_k$ are precision and recall at the $k$th score threshold and $R_0=0$. AP measures
+ranking without selecting a decision threshold and is not an interpolated trapezoidal area. Fraud
+precision, recall and F1 are respectively $TP/(TP+FP)$, $TP/(TP+FN)$ and $2PR/(P+R)$, with a
+zero-denominator convention of zero. Accuracy is not used as a headline metric under 4.86\%
+prevalence.
 
-\textbf{The one-class SVM}~\cite{scholkopf2001} is fitted on the real training ads only and scores
-an ad by how far it lies outside their region, so it never sees a fraud. Our first version got two
-choices wrong. It read the full feature matrix, in which the four numeric columns make up 45\% of
-each row's length against under 5\% for the text, so its RBF kernel mostly compared ad lengths;
-and it left the kernel width $\gamma$ at its default. The final version reads the TF-IDF text
-only, reduced to 100 dimensions with PCA and scaled to unit length. A cross-validation map on the
-seed-0 training rows showed that $\gamma$ decides almost everything: a broad kernel
-($\gamma \le 1$) ranks frauds as \emph{more} typical than real ads (ROC-AUC 0.23 to 0.30), the
-score peaks around $\gamma = 30$, and $\nu$ barely matters. The search therefore covers the whole
-grid $\gamma \in \{3, 10, 30, 100, 300\}$, $\nu \in \{0.05, 0.2\}$.
+\textbf{Classical selection.} Every non-dummy classical estimator uses three-fold
+\texttt{StratifiedGroupKFold} tuning on the training partition only, with AP as the search score.
+Vectorizers, imputers, scalers, PCA and category encoders are refitted within each cross-validation
+training fold. The selected configuration is then fitted on the whole training partition. It is not
+refitted on validation data.
 
-\textbf{DistilBERT}~\cite{sanh2019}, a compact version of BERT~\cite{devlin2019}, reads the first 256
-tokens of each ad in context and is fine-tuned on the training rows with AdamW (learning rate
-$2 \cdot 10^{-5}$, batch size 128, up to 5 epochs), softened class weights, and the weights of the
-best validation epoch kept. It runs on a GPU server.
+\textbf{Transformer selection.} Top-two and full models use a fixed training configuration rather
+than a hyperparameter grid. After every epoch, validation AP determines whether to save a new best
+checkpoint. Training stops after two epochs without a strict validation-AP improvement, up to four
+epochs, and restores the best checkpoint. Validation is used for epoch selection and then remains
+the threshold-selection set, so validation AP is not an unbiased evaluation of the selected epoch.
 
-\textbf{The stack}~\cite{wolpert1992} is a logistic regression whose only two inputs are the logits
-of DistilBERT's and TF-IDF logistic regression's saved scores. It is fitted on the validation rows,
-because both models are over-confident on their own training rows, and its threshold comes from
-grouped out-of-fold predictions inside the validation rows.
+\textbf{Decision and test rule.} For every non-dummy model and partition, one threshold maximizes
+fraud F1 on validation scores; ties are resolved toward fewer fraud alarms. The majority dummy instead
+uses a fixed threshold of 0.5 on its constant zero probability, so it predicts real everywhere. Each
+threshold is frozen before computing validation and test precision, recall and F1. AP uses the original continuous score:
+positive-class probabilities for logistic regression and decision trees, sign-flipped decision scores
+for one-class SVMs, and fraud-minus-real logit margins for fine-tuned models. Test labels do not
+enter fitting,
+hyperparameter or epoch search, or threshold selection within a run.
 
-The models use scikit-learn~\cite{pedregosa2011}.
+\textbf{Aggregation.} A paired difference subtracts two models on the same partition before taking
+the mean. A positive count records strictly positive differences among the five partitions. Values
+after $\pm$ are sample standard deviations over those five values, using denominator four. They
+describe variability, not confidence intervals or independent-sample significance. Each of the 45
+runs stores a JSON metric record and an NPZ file containing validation/test labels and scores.
+Lineage checks bind each result to the cleaned-data fingerprint and exact split indices, preventing
+stale scores from being resumed after data or row changes.
+
+\subsection{Classical estimators}
+
+\textbf{Logistic regression.} Class-balanced logistic regression uses the \texttt{liblinear} solver
+and selects inverse regularization $C$ from $\{0.1,1,10\}$. Text-only LR uses TF-IDF alone, whereas
+structured LR adds every structured block in Table~\ref{tab:features}. Their paired comparison is
+the classical feature ablation.
+
+\textbf{Decision tree.} A class-weight-balanced decision tree uses structured TF-IDF features. Its
+grid contains maximum depth $\{5,10,\mathrm{None}\}$ and minimum samples per leaf $\{1,10\}$.
+
+\textbf{One-class SVM.} A one-class SVM~\cite{scholkopf2001} is fitted only on known-real training
+rows. Its sign-flipped decision value treats unusualness as fraud evidence. TF-IDF is reduced to 100
+PCA components and unit-normalized before an RBF kernel. The grid is
+$\nu\in\{0.05,0.1\}$ and $\gamma\in\{1,10,30\}$; every stage sees real training rows only.
+
+\textbf{Majority floor.} The most-frequent dummy always predicts real. Its AP is test fraud
+prevalence, while thresholded fraud precision, recall and F1 are zero. All scikit-learn estimators
+follow the common implementation interface~\cite{pedregosa2011}.
+
+\subsection{Selective and full fine-tuning}
+
+\textbf{Architecture.} Both adaptation strategies use \texttt{distilbert-base-uncased} and a custom
+two-logit classifier. The first token state, conventionally called CLS, passes through a 768-to-768
+linear layer, ReLU and dropout (\texttt{seq\_classif\_dropout=0.2}). A text-only model classifies
+this transformed state. A fused model concatenates the dense structured vector with that state
+immediately before the final linear two-logit layer. Top-two tuning freezes embeddings and encoder
+layers 0--3 and trains layers 4--5 plus the head, about 14.77 million parameters. Full tuning updates
+every encoder and head parameter, approximately 66.96 million parameters in total.
+
+\textbf{Structured fusion.} The optional late-fusion path is fold-fit: each fused run fits its
+preprocessor on that partition's training rows only. Nominal values receive missing-category one-hot
+encoding, numeric values receive median imputation and standardization, and binary values receive
+most-frequent imputation. The fitted transform is then applied unchanged to train, validation and
+test rows. The text arm has no such structured input.
+
+\textbf{Optimization.} Each ad is truncated to at most 512 tokens and batches use dynamic padding.
+The micro-batch and effective batch are both 16. Training uses bfloat16 (\texttt{bf16}) autocast on
+CUDA. Unweighted cross-entropy is optimized with AdamW at learning rate $2\times10^{-5}$ and weight
+decay 0.01. A linear schedule allocates 10\% of steps to warmup, gradient norms are clipped at 1.0,
+and no sampling or class weighting is applied. The saved checkpoint records the immutable base
+revision and trainable parameter counts.
+
+\textbf{Seed interpretation.} For each partition index, one declared optimization seed controls
+transformer initialization and data order. Full and top-two arms share the partition and seed index,
+which supports a paired adaptation contrast within that index. Across indices, however, split
+changes and optimization-seed changes occur together. The five-run differences therefore cannot
+separate partition sensitivity from optimization variability.

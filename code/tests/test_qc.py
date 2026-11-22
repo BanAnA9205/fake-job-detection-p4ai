@@ -21,7 +21,7 @@ def _frame(descriptions, companies, labels=None):
                          "fraudulent": labels if labels is not None else [0] * n})
 
 
-def test_group_ids_links_exact_company_and_near_copies():
+def test_group_ids_links_exact_company_but_not_near_copies():
     long = "we build data pipelines in python and sql for the analytics platform team daily"
     df = _frame(
         ["Alpha beta gamma", "alpha  BETA gamma",          # 0, 1: same description up to case/space
@@ -30,7 +30,7 @@ def test_group_ids_links_exact_company_and_near_copies():
          "kappa lambda mu", "nu xi omicron"],              # 6, 7: unrelated, no company
         [None, None, "Acme Ltd", "acme  ltd", None, None, None, None])
     g = qc.group_ids(df)
-    assert g[0] == g[1] and g[2] == g[3] and g[4] == g[5]
+    assert g[0] == g[1] and g[2] == g[3] and g[4] != g[5]
     assert len({g[0], g[2], g[4], g[6], g[7]}) == 5, "unrelated ads must stay apart"
 
 
@@ -59,37 +59,32 @@ def test_split_check_rejects_a_shared_group():
         pass  # four rows cannot be balanced; only the group check matters here
 
 
-def test_near_duplicate_clusters_without_shared_words():
-    assert qc.near_duplicate_clusters(pd.Series(["alpha", "beta", "gamma"])).tolist() == [0, 1, 2]
+def test_single_value_columns_includes_all_missing_and_all_one():
+    frame = pd.DataFrame({
+        "job_id": [1, 2, 3],
+        "all_missing": [None, None, None],
+        "all_one": [1, 1, 1],
+        "one_and_missing": [1, None, 1],
+        "rare": [0, 0, 1],
+        "fraudulent": [0, 0, 1],
+    })
+    assert qc.single_value_columns(frame) == ["all_missing", "all_one"]
+    assert "one_and_missing" not in qc.single_value_columns(frame), "missingness remains a signal"
 
 
-def test_assert_clean_catches_leftovers():
-    good = pd.DataFrame({"job_id": [1, 2], "group": ["a", "b"], "description": ["fine", "also fine"]})
-    qc.assert_clean(good, ["description"])
-    for bad_text in (["#NAME?", "fine"], ["see #URL_ab12#", "fine"], ["same", "same"]):
-        bad = good.assign(description=bad_text)
-        try:
-            qc.assert_clean(bad, ["description"])
-        except AssertionError:
-            continue
-        raise AssertionError(f"assert_clean missed {bad_text}")
-
-
-def test_checks():
-    df = pd.DataFrame({"requirements": ["#NAME?", None, "python", "."],
-                       "fraudulent": [1, 0, 0, 1]})
-    dm = qc.disguised_missing(df, ["requirements"])
-    assert dm.loc["requirements", "NaN"] == 1 and dm.loc["requirements", "junk"] == 2
-    text = pd.Series(["see #URL_ab12# and #URL_cd34#", "#EMAIL_3a1e#PHONE_ad7b##", "plain"])
-    pc = qc.placeholder_counts(text)
-    assert pc.loc["URL", "ads"] == 1 and pc.loc["URL", "distinct hashes"] == 2
-    assert pc.loc["PHONE", "ads"] == 1 and pc.loc["EMAIL", "ads"] == 1
-    assert qc.glued_boundaries(pd.Series(["one place.We go", "fine text"])).tolist() == [1, 0]
-    assert qc.group_purity(["a", "a", "b", "b", "c"], [1, 1, 0, 1, 0]) == {
-        "groups with 2+ ads": 2, "all fraud": 1, "all real": 0, "mixed": 1}
-    splits = {"train": np.array([0, 1]), "val": np.array([2]), "test": np.array([3, 4])}
-    ov = qc.split_overlap(splits, {"company": ["A", "", "B", "A", ""]}, np.array([0, 0, 0, 1, 0]))
-    assert ov.loc["company", "test ads"] == 1 and ov.loc["company", "test frauds"] == 1
+def test_group_ids_links_original_contact_but_not_fuzzy_text():
+    df = _frame(
+        ["alpha beta gamma", "alpha beta gamma now", "delta epsilon zeta"],
+        [None, None, None],
+    )
+    contacts = pd.Series([
+        ("URL:abc", "EMAIL:shared"),
+        (),
+        ("PHONE:123", "EMAIL:shared"),
+    ])
+    groups = qc.group_ids(df, contacts)
+    assert groups[0] != groups[1], "fuzzy near-copies are not merged"
+    assert groups[0] == groups[2], "an original contact hash links related ads"
 
 
 if __name__ == "__main__":

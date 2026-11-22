@@ -1,7 +1,6 @@
-"""Evaluation helpers: scores, metrics at a threshold, threshold choice and a comparison table."""
+"""Shared scoring, threshold selection, and imbalance-aware evaluation."""
 
 import numpy as np
-import pandas as pd
 from sklearn.metrics import (
     average_precision_score,
     confusion_matrix,
@@ -21,19 +20,14 @@ def score_of(model, X):
 
 
 def evaluate(y, score, thr):
-    """Thresholded metrics plus PR-AUC and ROC-AUC.
+    """Thresholded metrics plus average precision and ROC-AUC.
 
-    thr is required: probability scores and SVM decision scores need
-    different thresholds, so the caller must state one.
+    The threshold is explicit because probability and SVM decision scores use different scales.
     """
     y = np.asarray(y).astype(int)
     score = np.asarray(score, dtype=float)
-
-    # Hard predictions at this threshold and their confusion counts.
     pred = (score >= thr).astype(int)
     tn, fp, fn, tp = confusion_matrix(y, pred, labels=[0, 1]).ravel()
-
-    # zero_division=0: a model that flags nothing gets precision 0 instead of a warning.
     return {
         "precision": float(precision_score(y, pred, zero_division=0)),
         "recall": float(recall_score(y, pred, zero_division=0)),
@@ -42,56 +36,32 @@ def evaluate(y, score, thr):
         "fp": int(fp),
         "fn": int(fn),
         "tn": int(tn),
-        # Threshold-free ranking metrics.
         "pr_auc": float(average_precision_score(y, score)),
         "roc_auc": float(roc_auc_score(y, score)),
     }
 
 
 def pick_threshold(y_val, score_val):
-    """Threshold that maximises F1, chosen on VALIDATION scores only.
-
-    On ties the HIGHER threshold wins, which flags fewer rows at the same F1.
-    """
+    """Maximize F1 with integer ratios, breaking exact ties toward fewer alarms."""
     y = np.asarray(y_val).astype(int)
     s = np.asarray(score_val, dtype=float)
-
-    # Precision and recall at every distinct score. The last point (precision 1,
-    # recall 0) has no threshold, so it is dropped.
-    precision, recall, thresholds = precision_recall_curve(y, s)
-    precision, recall = precision[:-1], recall[:-1]
-
-    # F1 at each threshold (0 where precision and recall are both 0).
-    denom = np.where(precision + recall > 0, precision + recall, 1.0)
-    f1 = 2 * precision * recall / denom
-
-    # Thresholds come in ascending order, so the last maximum is the highest threshold.
-    best = len(f1) - 1 - int(np.argmax(f1[::-1]))
-    return float(thresholds[best])
-
-
-def compare_table(results):
-    """One row per model comparing train and test metrics.
-
-    results maps model name to {"train": <evaluate dict>, "test": <evaluate dict>}.
-    gap is train PR-AUC minus test PR-AUC, i.e. the generalization gap.
-    """
-    # One row per model; "gap" is the generalisation gap in PR-AUC.
-    rows = []
-    for name, res in results.items():
-        tr, te = res["train"], res["test"]
-        rows.append(
-            {
-                "model": name,
-                "train_pr_auc": tr["pr_auc"],
-                "test_pr_auc": te["pr_auc"],
-                "train_f1": tr["f1"],
-                "test_f1": te["f1"],
-                "train_recall": tr["recall"],
-                "test_recall": te["recall"],
-                "train_precision": tr["precision"],
-                "test_precision": te["precision"],
-                "gap": tr["pr_auc"] - te["pr_auc"],
-            }
-        )
-    return pd.DataFrame(rows)
+    _, _, thresholds = precision_recall_curve(y, s)
+    positives = int(y.sum())
+    best_num, best_den, best_alerts = 0, 1, len(y) + 1
+    best_threshold = float(thresholds[0])
+    for threshold in thresholds:
+        predicted = s >= threshold
+        tp = int(np.sum(predicted & (y == 1)))
+        fp = int(np.sum(predicted & (y == 0)))
+        fn = positives - tp
+        alerts = tp + fp
+        denominator = 2 * tp + fp + fn
+        if denominator == 0:
+            continue
+        # Compare exact integer ratios instead of floating-point F1 values.
+        if 2 * tp * best_den > best_num * denominator or (
+            2 * tp * best_den == best_num * denominator and alerts < best_alerts
+        ):
+            best_num, best_den = 2 * tp, denominator
+            best_alerts, best_threshold = alerts, float(threshold)
+    return best_threshold
