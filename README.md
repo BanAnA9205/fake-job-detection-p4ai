@@ -84,7 +84,8 @@ export HF_HOME="$PWD/code/features/hf_cache" HF_HUB_DISABLE_TELEMETRY=1
 In notebook 03, set `ON_GPU_SERVER = True` and choose a free `DEVICE`. `RUN_TRAINING = True` trains the
 20 runs (and runs the smoke tests); `VALIDATE_ON_GPU = True` reloads the seed-0 checkpoints and checks
 that they reproduce the saved scores. With `ON_GPU_SERVER = False` the notebook only verifies saved
-results. The committed notebook was last run with `RUN_TRAINING = False` and `VALIDATE_ON_GPU = True`
+results. The committed notebook was last run with `ON_GPU_SERVER = True`, `RUN_TRAINING = False` and
+`VALIDATE_ON_GPU = True`
 (after training), so it shows the verification, the checkpoint reload check and the explanations;
 the per-epoch training logs are kept in each run's JSON `history`. Run notebook 04 after notebooks 01–03.
 

@@ -51,7 +51,10 @@ zero-denominator convention of zero. Accuracy is not used as a headline metric u
 prevalence.
 
 \textbf{Classical selection.} Every non-dummy classical estimator uses three-fold
-\texttt{StratifiedGroupKFold} tuning on the training partition only, with AP as the search score. The log-spaced grids were widened until the tree and one-class SVM select interior values. LR
+\texttt{StratifiedGroupKFold} tuning on the training partition only, with AP as the search score. The log-spaced grids were widened until the tree's minimum leaf size and the one-class SVM's
+$\gamma$ are selected inside their grids; the tree then grows without a depth limit on four of five
+splits, so its size is controlled by the leaf-size limit, and $\nu$, the expected share of training
+outliers, takes both of its values. LR
 often selects the largest $C$, but its cross-validated AP is flat there: on seeds 0, 1 and 4,
 extending $C$ from 100 to $10^5$ changes it by less than 0.005, so the selected values all amount to
 very weak regularization.

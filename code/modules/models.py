@@ -93,7 +93,8 @@ def get_models(seed: int = 0) -> dict[str, object]:
     }
 
 
-# Log-spaced grids. Tree and one-class SVM selections are interior; LR's CV AP is flat for C >= 100.
+# Log-spaced grids. Tree leaf size and one-class SVM gamma are selected inside the grid; LR's CV AP
+# is flat for C >= 100, so its large selected C values all mean very weak regularization.
 PARAM_GRIDS = {
     "logreg_text": {"clf__C": [0.1, 1, 10, 100, 1000, 10000]},
     "logreg": {"clf__C": [0.1, 1, 10, 100, 1000, 10000]},
