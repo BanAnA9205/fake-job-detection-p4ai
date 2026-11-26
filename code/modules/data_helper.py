@@ -7,7 +7,6 @@ import random
 import numpy as np
 import pandas as pd
 from modules import qc
-from sklearn.model_selection import StratifiedGroupKFold
 
 TARGET = "fraudulent"
 
@@ -16,6 +15,8 @@ CAT_COLS = ["employment_type", "required_experience", "required_education", "ind
 BIN_COLS = ["telecommuting", "has_company_logo", "has_questions"]
 
 BALANCE_TOL = 0.01  # allowed drift of the positive rate between splits
+SIZE_TOL = 0.02  # allowed drift of a split's share of all rows from its target share
+MAX_DRAWS = 10_000  # random group assignments tried before giving up
 
 # The cleaned data (with its split groups), written once by notebook 01 and read by every later step.
 PROCESSED = "../data/processed/emscad_clean.csv.gz"
@@ -100,30 +101,39 @@ def _check_splits(splits, y, groups):
 
 
 def make_splits(df, seed=0, val_size=0.2, test_size=0.2):
-    """Grouped, stratified train/val/test split returned as positional row indices."""
+    """Grouped train/val/test split returned as positional row indices.
+
+    Whole groups are assigned at random with the target probabilities, and the draw is repeated
+    until every split is close to its target size and to the overall positive rate. Random
+    assignment lets large groups land in different splits for different seeds.
+    """
     assert "group" in df.columns, "run clean() first: df has no 'group' column"
     assert 0 < val_size < 1 and 0 < test_size < 1 and val_size + test_size < 1
     y = df[TARGET].to_numpy()
     groups = df["group"].to_numpy()
-    n = len(df)
+    codes, _ = pd.factorize(groups)
+    group_rows = np.bincount(codes)
+    group_positives = np.bincount(codes, weights=y)
+    shares = np.array([1.0 - val_size - test_size, val_size, test_size])
+    rng = np.random.default_rng(seed)
 
-    # Step 1: cut the test split off first (1 fold out of 1/test_size folds).
-    # StratifiedGroupKFold keeps a whole group in one split and balances the label.
-    n_test_folds = max(2, round(1.0 / test_size))
-    outer = StratifiedGroupKFold(n_splits=n_test_folds, shuffle=True, random_state=seed)
-    trainval, test = next(outer.split(np.zeros((n, 1)), y, groups))
+    for _ in range(MAX_DRAWS):
+        side = rng.choice(3, size=len(group_rows), p=shares)
+        rows = np.bincount(side, weights=group_rows, minlength=3)
+        positives = np.bincount(side, weights=group_positives, minlength=3)
+        if rows.min() == 0:
+            continue
+        if (np.abs(rows / len(y) - shares).max() <= SIZE_TOL
+                and np.abs(positives / rows - y.mean()).max() <= BALANCE_TOL):
+            break
+    else:
+        raise ValueError(
+            f"no balanced grouped split in {MAX_DRAWS} random draws; "
+            "the data is too small or too clumped for a balanced grouped split"
+        )
 
-    # Step 2: split the rest into train and validation, so val_size is a share of all rows.
-    n_val_folds = max(2, round(1.0 / (val_size / (1.0 - test_size))))
-    inner = StratifiedGroupKFold(n_splits=n_val_folds, shuffle=True, random_state=seed + 1)
-    tr, va = next(inner.split(np.zeros((len(trainval), 1)), y[trainval], groups[trainval]))
-
-    # Step 3: back to positional indices of the full frame, then verify the result.
-    splits = {
-        "train": np.sort(trainval[tr]).astype(int),
-        "val": np.sort(trainval[va]).astype(int),
-        "test": np.sort(test).astype(int),
-    }
+    row_side = side[codes]
+    splits = {name: np.flatnonzero(row_side == k) for k, name in enumerate(("train", "val", "test"))}
     _check_splits(splits, y, groups)
     return splits
 

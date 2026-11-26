@@ -24,18 +24,21 @@ share weight, so these are associations within one fitted model, not independent
 \label{tab:terms}
 \end{table}
 
-\textbf{Interpretation.} Money-related words (\emph{money}, \emph{income}, \emph{earn}) coexist with
-placeholder/link phrases such as \emph{link url} and \emph{apply using}. Industry and function terms
-also have large weights. This mixture is consistent with both scam language and dataset-specific
-poster/category patterns; the table alone cannot separate those explanations.
+\textbf{Interpretation.} Money words (\emph{money}) coexist with placeholder/link phrases
+(\emph{link url}, \emph{link}, \emph{url}) and with tokens tied to specific posters, such as
+\emph{timejob}, \emph{northwestern} and \emph{novation}. Terms towards real describe conventional
+professional ads (\emph{client}, \emph{candidate}, \emph{developer}, \emph{experience}). This mixture
+is consistent with both scam language and dataset-specific poster patterns; the table alone cannot
+separate those explanations, and the poster-specific tokens are a reminder that grouping removes
+exact duplicates, not every recurring advertiser.
 
 \subsection{Decision-tree importances}
 
 \textbf{Global view.} Table~\ref{tab:tree-terms} reports impurity-based feature importances for the
-selected seed-0 tree. Company-profile presence dominates with importance 0.389, followed by the
-\emph{High School or Equivalent} education category at 0.116 and company-logo presence at 0.037. The strong
-profile effect agrees descriptively with the class-conditional difference in
-Figure~\ref{fig:eda-flags}.
+selected seed-0 tree. The phrase \emph{leveraging career} leads with importance 0.199, followed by
+company-logo presence at 0.127 and \emph{data entry} at 0.097. The logo effect agrees descriptively
+with the class-conditional difference in Figure~\ref{fig:eda-flags}, and \emph{data entry} matches the
+clerical vocabulary found by the neural attributions below.
 
 \begin{table}[tb]
 \centering
@@ -56,19 +59,72 @@ features that offer useful training partitions. It is not a held-out permutation
 estimate. Both classical explanation tables belong to one inspected partition and do not establish
 that the same features transfer to another split, source or time period.
 
-\subsection{Errors and neural evidence}
+\subsection{Classical error inspection}
 
 \textbf{Classical error inspection.} Notebook \texttt{02} prints the highest-scoring validation false
 alarms and lowest-scoring validation misses for structured LR. Examples are selected on validation
-rather than test errors, separating the displayed cases from test labels.
+rather than test errors, separating the displayed cases from test labels. On seed 0 the most
+confident false alarms are a remote data-entry ad and two engineering ads from the oil-and-gas and
+Six Sigma domains, whose vocabulary the model associates with fraud; the most confident misses are
+one templated series of controls-engineer ads that the model scores as ordinary vacancies.
 
-\textbf{Current neural evidence.} The neural analyses reported here are behavioral comparisons of
-text-only/fused inputs and top-two/full adaptation budgets, plus an input-token coverage audit. No
-neural occlusion, integrated-gradients, attention-attribution or counterfactual explanation analysis
-has been run. Fine-tuning does compute gradients for optimization, but those gradients are not
-reported as token explanations.
+\subsection{Fine-tuned DistilBERT}
+\label{sec:explain-neural}
 
-\textbf{Interpretation limit.} The fine-tuned CLS state has no direct one-to-one word
-interpretation. The classical coefficients and tree importances are therefore the only global
-feature-attribution artifacts presented, while the paired neural results indicate predictive
-performance, not which linguistic evidence the neural models use.
+\textbf{Model and evidence.} The explained model is the full fine-tuned text-only model on seed 0
+(test AP 0.640). It is chosen by design: it has the largest adaptation budget, and without structured
+inputs every prediction comes from the text, so text attributions are complete. Two views are
+computed on its seed-0 test partition.
+
+\textbf{Field occlusion.} Table~\ref{tab:field-occlusion} blanks one text field for every test ad,
+re-scores the ads and reports the resulting test AP. Removing the company profile costs the most
+ranking quality, 0.097 AP, consistent with the profile-presence gap in Figure~\ref{fig:eda-flags};
+the title costs 0.031. Blanking the description changes AP by only 0.006, although it moves fraud
+margins the most, so for ranking its information is largely shared with the other fields.
+Requirements and benefits carry no measurable AP for this model.
+
+\begin{table}[tb]
+\centering
+\small
+\begin{tabular}{lrrr}
+\toprule
+\textbf{Blanked field} & \textbf{Ads with field} & \textbf{Test AP} & \textbf{AP drop} \\
+\midrule
+\tabinput{includes/tab_field_occlusion}
+\bottomrule
+\end{tabular}
+\caption{Field occlusion for the seed-0 full fine-tuned text model (test AP 0.640 with every field).
+Each row blanks one field for all test ads; positive drops mean the field helps ranking.}
+\label{tab:field-occlusion}
+\end{table}
+
+\textbf{Integrated gradients.} Integrated gradients~\cite{sundararajan2017} attribute each
+fraudulent test ad's fraud margin to its tokens, integrating gradients along a straight path from a
+baseline that keeps \texttt{[CLS]} and \texttt{[SEP]} and replaces every other token by
+\texttt{[PAD]} (32 steps). Summed attributions match each ad's margin difference from the baseline
+with a median relative error of 0.3\% (90th percentile 1.3\%), so the attributions are faithful to
+the model. Table~\ref{tab:ig-words} sums word-level attributions over the 170 fraud ads, after the
+TF-IDF stop-word list and words seen in fewer than five ads are removed. Words pushing towards fraud
+describe low-skill clerical work (\emph{assistant}, \emph{administrative}, \emph{clerical},
+\emph{typist}, \emph{entry}) and earnings (\emph{earn}, \emph{earning}); words pushing towards real
+describe an established employer (\emph{experience}, \emph{customer}, \emph{consulting},
+\emph{firm}). Two of them, \emph{earn} and \emph{administrative}, are also among the fifteen largest positive
+structured-LR coefficients on this partition. The attributions remain an association learned from
+EMSCAD, not a causal fraud signal.
+
+\begin{table}[tb]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrr@{\hspace{2.5em}}lrr}
+\toprule
+\multicolumn{3}{c}{\textbf{Towards fraud}} & \multicolumn{3}{c}{\textbf{Towards real}} \\
+\textbf{Word} & \textbf{Attr./ad} & \textbf{Ads} & \textbf{Word} & \textbf{Attr./ad} & \textbf{Ads} \\
+\midrule
+\tabinput{includes/tab_ig_words}
+\bottomrule
+\end{tabular}
+\caption{Integrated-gradients word attributions for the seed-0 full fine-tuned text model, summed over
+the 170 fraudulent test ads and divided by that count. ``Ads'' counts fraud ads containing the word.}
+\label{tab:ig-words}
+\end{table}

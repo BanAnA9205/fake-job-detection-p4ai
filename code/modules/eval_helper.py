@@ -8,7 +8,6 @@ from sklearn.metrics import (
     precision_recall_curve,
     precision_score,
     recall_score,
-    roc_auc_score,
 )
 
 
@@ -20,7 +19,7 @@ def score_of(model, X):
 
 
 def evaluate(y, score, thr):
-    """Thresholded metrics plus average precision and ROC-AUC.
+    """Thresholded metrics plus average precision.
 
     The threshold is explicit because probability and SVM decision scores use different scales.
     """
@@ -37,7 +36,6 @@ def evaluate(y, score, thr):
         "fn": int(fn),
         "tn": int(tn),
         "pr_auc": float(average_precision_score(y, score)),
-        "roc_auc": float(roc_auc_score(y, score)),
     }
 
 

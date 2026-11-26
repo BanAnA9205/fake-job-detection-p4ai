@@ -18,12 +18,14 @@ metrics and row-level scores. All variants retain the natural test prevalence an
 data, not test labels, for model or epoch selection and threshold choice.
 
 \textbf{Main findings.} TF-IDF logistic regression with structured features has the highest mean
-test average precision (AP), $0.5928 \pm 0.1651$, followed by text-only logistic regression at
-$0.5762 \pm 0.1875$. The strongest neural mean is full fine-tuning with structured fusion,
-$0.5047 \pm 0.1696$ AP. Nevertheless, both full-model variants lose to structured logistic
-regression on every paired test-AP comparison. Full-minus-top-two mean AP differences are only
-$+0.0245$ for text and $+0.0474$ for fusion, with improvements on two and three of five splits.
-Fusion is also inconsistent across validation and test partitions.
+test average precision (AP), $0.675 \pm 0.138$, followed by text-only logistic regression at
+$0.657 \pm 0.124$. The strongest neural mean is full fine-tuning on text alone, $0.615 \pm 0.109$
+AP, and structured LR beats both full-model variants on four of five paired partitions. Full
+fine-tuning improves on tuning only the top two layers on all five partitions for text (mean
+$+0.106$ AP) and on four for fusion ($+0.037$). Structured fields help the top-two models but not the
+fully tuned ones, and a one-class SVM trained without fraud labels does no better than the prevalence
+floor. Integrated gradients and field occlusion show that the fine-tuned model relies most on the
+company profile and on clerical-work and earnings vocabulary.
 
 \textbf{Scope.} These are exploratory comparisons on one dataset, not evidence of statistical
 equivalence or deployment readiness. The five partitions overlap, and each transformer partition
@@ -31,5 +33,5 @@ has one declared optimization seed, so partition and optimization variability ar
 Full-data EDA and inspected seed-0 diagnostics further require a fresh evaluation before any
 confirmatory claim.
 
-\textbf{Code availability.} The notebooks, shared modules, saved splits, and report-generation code
-are available at \url{https://github.com/BanAnA9205/fake-job-detection-p4ai}.
+\textbf{Code availability.} The notebooks, shared modules and saved splits, which also regenerate
+every figure and table in this report, are available at \url{https://github.com/BanAnA9205/fake-job-detection-p4ai}.

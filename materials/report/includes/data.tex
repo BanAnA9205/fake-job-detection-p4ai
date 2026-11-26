@@ -101,11 +101,16 @@ partition or cross-validation fold.}
 
 \subsection{Saved grouped partitions}
 
-\textbf{Procedure.} \texttt{StratifiedGroupKFold} creates a 60/20/20 train/validation/test partition
-for each seed from 0 through 4. Every partition has 10,558 training ads and exactly 514 training,
-171 validation and 171 test positives. Seed 3 has 3,520 validation and 3,519 test ads; every other
-seed has 3,519 validation and 3,520 test ads. Saved indices include a content-and-label fingerprint
-so that indices from a different cleaned frame are rejected.
+\textbf{Procedure.} For each seed from 0 through 4, every related-ad group is assigned at random to
+train, validation or test with probabilities 0.6, 0.2 and 0.2. The draw is repeated until each
+partition holds within two percentage points of its target share of ads and has a fraud rate within
+one percentage point of the overall rate. Scikit-learn's \texttt{StratifiedGroupKFold} is not used
+because it places large groups in a fixed order: it would put the 723-ad group in the test partition
+for every seed. The five partitions contain 10,314--10,818 training, 3,190--3,784 validation and
+3,199--3,719 test ads, with 137--187 fraud ads per test partition. The group containing 101 fraud ads
+always falls in training, since placing it in validation or test would break the fraud-rate tolerance.
+Saved indices include a content-and-label fingerprint so that indices from a different cleaned frame
+are rejected.
 
 \textbf{Guarantee and boundary.} Checks confirm complete row coverage and no exact related-ad group
 shared by train, validation or test within a partition. The guard does not remove paraphrases,

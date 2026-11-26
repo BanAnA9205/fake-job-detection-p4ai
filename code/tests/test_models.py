@@ -71,6 +71,19 @@ def test_models_are_expected_estimators():
     assert isinstance(models["ocsvm"], models_mod.OneClassDetector)
 
 
+def test_no_model_reweights_classes():
+    models = models_mod.get_models()
+    for name in ("logreg_text", "logreg", "tree"):
+        assert models[name].named_steps["clf"].class_weight is None, name
+
+
+def test_one_class_svm_uses_the_structured_lr_feature_blocks():
+    models = models_mod.get_models()
+    blocks = [name for name, _, _ in models["logreg"].named_steps["pre"].transformers]
+    detector_pre = models["ocsvm"].detector.named_steps["pre"]
+    assert [name for name, _, _ in detector_pre.transformers] == blocks
+
+
 def test_param_grids_match_pipeline_params():
     models = models_mod.get_models()
     assert set(models_mod.PARAM_GRIDS) == set(models)
@@ -90,7 +103,7 @@ def test_supervised_models_fit_and_score():
         assert score[y == 1].mean() > score[y == 0].mean() + 0.2
 
 
-def test_full_one_class_pipeline_uses_only_real_training_text():
+def test_full_one_class_pipeline_fits_only_on_real_training_rows():
     df, X = _xy()
     y = df["fraudulent"].to_numpy()
     model = models_mod.get_models()["ocsvm"].set_params(

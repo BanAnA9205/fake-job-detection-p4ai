@@ -39,7 +39,7 @@ def test_evaluate():
     none = evaluate([1, 0, 1, 0], [0.4, 0.3, 0.2, 0.1], thr=0.5)
     assert none["precision"] == 0.0 and none["recall"] == 0.0 and none["f1"] == 0.0
     assert np.isclose(ev["pr_auc"], 1.0)
-    assert np.isclose(ev["roc_auc"], 1.0)
+    assert "roc_auc" not in ev
     assert np.isclose(ev["f1"], 1.0)
     for key in ("precision", "recall", "f1", "tp", "fp", "fn", "tn"):
         assert key in ev

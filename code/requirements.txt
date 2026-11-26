@@ -1,9 +1,8 @@
 # Core modules and every lightweight notebook step.
 # Tested with: Python 3.12.15, numpy 2.5.5, pandas 3.1.1, scipy 1.18.1,
 # scikit-learn 1.9.1, matplotlib 3.11.2, joblib 1.6.0.
-# Lower bounds below come from the APIs the code uses, NOT from testing on older versions:
-#   scikit-learn >= 1.3  (LinearSVC dual="auto", OneHotEncoder sparse_output);
-#   newer versions are also supported and are what the current environment uses.
+# Lower bounds come from the APIs the code uses (e.g. scikit-learn >= 1.3 for
+# OneHotEncoder sparse_output), not from testing on older versions.
 numpy>=1.24
 pandas>=2.0
 scipy>=1.10

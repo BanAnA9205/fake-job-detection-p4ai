@@ -179,6 +179,22 @@ def test_make_splits():
     assert not np.array_equal(splits["test"], other["test"])
 
 
+def test_make_splits_places_a_large_group_differently_across_seeds():
+    frame = make_frame(n_groups=300, per_group=10, pos_per_group=1)
+    big = make_frame(n_groups=1, per_group=80, pos_per_group=0)
+    big["job_id"] += len(frame)
+    big["description"] = "one large all-real template"
+    big["company_profile"] = "one large employer"
+    cleaned = clean(pd.concat([frame, big], ignore_index=True))
+    big_group = cleaned["group"].value_counts().idxmax()
+    rows = np.flatnonzero(cleaned["group"].to_numpy() == big_group)
+    homes = set()
+    for seed in range(10):
+        splits = make_splits(cleaned, seed=seed)
+        homes.add(next(name for name, idx in splits.items() if rows[0] in set(idx)))
+    assert len(homes) > 1, f"the largest group always lands in {homes}"
+
+
 def test_make_splits_rejects_tiny_data():
     small = clean(make_frame(n_groups=3, per_group=4, pos_per_group=1))
     expect_error(ValueError, lambda: make_splits(small))

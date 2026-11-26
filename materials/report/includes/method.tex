@@ -1,6 +1,33 @@
 \section{Method}
 \label{method}
 
+\subsection{Pipeline overview}
+
+\textbf{Shared protocol.} Figure~\ref{fig:protocol} shows how both model families consume the same
+cleaned ads and five saved related-ad-group partitions, and which partition each step reads labels
+from. The two families differ only in representation and model selection; both then share one
+threshold rule and one test report. Figure~\ref{fig:finetuned-architecture} details the fine-tuned
+classifier and the two adaptation budgets.
+
+\begin{figure}[t]
+\centering
+\input{includes/fig_protocol}
+\caption{Experimental protocol, repeated on each of the five grouped 60/20/20 splits
+($\mathcal{D}_{\mathrm{tr}}$, $\mathcal{D}_{\mathrm{va}}$, $\mathcal{D}_{\mathrm{te}}$; 45 runs in total).
+Feature transforms are fitted on $\mathcal{D}_{\mathrm{tr}}$ only, classical hyperparameters are tuned by
+three-fold grouped cross-validation within $\mathcal{D}_{\mathrm{tr}}$, and test labels are used only in
+the final report. Shaded steps are shared by both families. The majority dummy, not shown, uses a fixed
+0.5 threshold.}
+\label{fig:protocol}
+
+\vspace{2.5em}
+\input{includes/fig_architecture}
+\caption{Fine-tuned DistilBERT classifier. Braces mark the parameters trained under each adaptation
+budget. In fused models the fold-fitted structured vector $z$ is concatenated with the projected CLS
+state before the final layer; text-only models skip the concatenation. The logit margin $\ell_{\mathrm{fraud}}-\ell_{\mathrm{real}}$ is the score used for AP.}
+\label{fig:finetuned-architecture}
+\end{figure}
+
 \subsection{Scope and targeted contrasts}
 
 \textbf{Design choices.} These comparisons are targeted ablations, not a model zoo. The majority
@@ -8,9 +35,7 @@ dummy is the floor, LR is a strong supervised baseline, the tree is a limited no
 and one-class SVM is a limited unlabeled-detection probe. The same DistilBERT base isolates
 adaptation budget and metadata effects. The core contrasts are structured LR minus text LR,
 full-minus-top-two separately for text and fusion, and fused-minus-text within each adaptation
-budget. An auxiliary frozen-head branch was removed because it was not central to genuine
-fine-tuning, and its pooling, token ceiling and classifiers prevented an exact control comparison.
-Other architectures are outside scope, not declared inferior.
+budget. Other architectures are outside scope, not declared inferior.
 
 \subsection{Evaluation and selection semantics}
 
@@ -26,7 +51,10 @@ zero-denominator convention of zero. Accuracy is not used as a headline metric u
 prevalence.
 
 \textbf{Classical selection.} Every non-dummy classical estimator uses three-fold
-\texttt{StratifiedGroupKFold} tuning on the training partition only, with AP as the search score.
+\texttt{StratifiedGroupKFold} tuning on the training partition only, with AP as the search score. The log-spaced grids were widened until the tree and one-class SVM select interior values. LR
+often selects the largest $C$, but its cross-validated AP is flat there: on seeds 0, 1 and 4,
+extending $C$ from 100 to $10^5$ changes it by less than 0.005, so the selected values all amount to
+very weak regularization.
 Vectorizers, imputers, scalers, PCA and category encoders are refitted within each cross-validation
 training fold. The selected configuration is then fitted on the whole training partition. It is not
 refitted on validation data.
@@ -56,18 +84,24 @@ stale scores from being resumed after data or row changes.
 
 \subsection{Classical estimators}
 
-\textbf{Logistic regression.} Class-balanced logistic regression uses the \texttt{liblinear} solver
-and selects inverse regularization $C$ from $\{0.1,1,10\}$. Text-only LR uses TF-IDF alone, whereas
+\textbf{Class imbalance.} No model reweights classes or resamples training data. AP depends only on
+the ranking of scores, and every decision threshold is chosen afterwards on validation F1, so class
+weighting is not needed for either; the same rule applies to the fine-tuned models.
+
+\textbf{Logistic regression.} Logistic regression is the supervised linear reference. It uses the
+\texttt{liblinear} solver and selects inverse regularization $C$ from $\{0.1,1,10,\dots,10^4\}$. Text-only LR uses TF-IDF alone, whereas
 structured LR adds every structured block in Table~\ref{tab:features}. Their paired comparison is
 the classical feature ablation.
 
-\textbf{Decision tree.} A class-weight-balanced decision tree uses structured TF-IDF features. Its
-grid contains maximum depth $\{5,10,\mathrm{None}\}$ and minimum samples per leaf $\{1,10\}$.
+\textbf{Decision tree.} A decision tree is the nonlinear contrast. It uses the same features as
+structured LR, so it differs from that model only in the classifier. Its grid contains maximum depth $\{5,10,\mathrm{None}\}$ and minimum samples per leaf $\{1,10,30,100\}$.
 
 \textbf{One-class SVM.} A one-class SVM~\cite{scholkopf2001} is fitted only on known-real training
-rows. Its sign-flipped decision value treats unusualness as fraud evidence. TF-IDF is reduced to 100
-PCA components and unit-normalized before an RBF kernel. The grid is
-$\nu\in\{0.05,0.1\}$ and $\gamma\in\{1,10,30\}$; every stage sees real training rows only.
+rows. It tests whether fraud can be detected as unusualness without fraud labels; its sign-flipped
+decision value is the fraud score. It uses the same features as structured LR, reduced to 100 PCA
+components and unit-normalized before an RBF kernel, because RBF distances are poorly behaved in the
+raw 20,000-dimensional sparse space. The grid is
+$\nu\in\{0.05,0.1\}$ and $\gamma\in\{1,10,30,100,300\}$; every stage sees real training rows only.
 
 \textbf{Majority floor.} The most-frequent dummy always predicts real. Its AP is test fraud
 prevalence, while thresholded fraud precision, recall and F1 are zero. All scikit-learn estimators
@@ -80,7 +114,8 @@ two-logit classifier. The first token state, conventionally called CLS, passes t
 linear layer, ReLU and dropout (\texttt{seq\_classif\_dropout=0.2}). A text-only model classifies
 this transformed state. A fused model concatenates the dense structured vector with that state
 immediately before the final linear two-logit layer. Top-two tuning freezes embeddings and encoder
-layers 0--3 and trains layers 4--5 plus the head, about 14.77 million parameters. Full tuning updates
+layers 0--3 and trains layers 4--5 plus the head, about 14.77 million parameters. Two of the six
+layers is a fixed partial budget chosen in advance, not a tuned value. Full tuning updates
 every encoder and head parameter, approximately 66.96 million parameters in total.
 
 \textbf{Structured fusion.} The optional late-fusion path is fold-fit: each fused run fits its
@@ -90,10 +125,12 @@ most-frequent imputation. The fitted transform is then applied unchanged to trai
 test rows. The text arm has no such structured input.
 
 \textbf{Optimization.} Each ad is truncated to at most 512 tokens and batches use dynamic padding.
-The micro-batch and effective batch are both 16. Training uses bfloat16 (\texttt{bf16}) autocast on
+The batch size is 16. Training uses bfloat16 (\texttt{bf16}) autocast on
 CUDA. Unweighted cross-entropy is optimized with AdamW at learning rate $2\times10^{-5}$ and weight
 decay 0.01. A linear schedule allocates 10\% of steps to warmup, gradient norms are clipped at 1.0,
-and no sampling or class weighting is applied. The saved checkpoint records the immutable base
+and no sampling or class weighting is applied. This fixed recipe lies inside the fine-tuning
+ranges recommended for BERT (learning rate $2\times10^{-5}$ to $5\times10^{-5}$, batch 16 or 32, two
+to four epochs)~\cite{devlin2019}, so no transformer hyperparameter is tuned. The saved checkpoint records the immutable base
 revision and trainable parameter counts.
 
 \textbf{Seed interpretation.} For each partition index, one declared optimization seed controls

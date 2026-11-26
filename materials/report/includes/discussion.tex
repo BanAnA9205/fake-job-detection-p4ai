@@ -6,25 +6,25 @@
 \textbf{TF-IDF advantage.} One plausible explanation is that repeated EMSCAD templates and strong
 lexical cues suit a high-dimensional sparse model, while right truncation can remove late fields.
 These are mechanisms for further controlled tests, not causes demonstrated by the present scores.
-The full models still do not surpass structured LR in paired test AP.
+Full fine-tuning still falls below structured LR on four of five paired partitions.
 
-\textbf{Adaptation value.} Full-minus-top-two AP gains are small relative to their split variability
-and are positive on only two or three partitions. The roughly 48-second difference in saved mean run
-time does not resolve whether additional trainable parameters are worthwhile, because quality is
-inconsistent and the timing was not a controlled end-to-end benchmark. Top-two tuning also uses a
-different, cheaper adaptation budget, not a statistically established equivalent model.
+\textbf{Adaptation value.} Full tuning improves on top-two tuning on all five splits for text and
+four for fusion, by 0.106 and 0.037 mean test AP. The extra trainable parameters are therefore worth
+their roughly 35 additional seconds per partition here, but even full tuning stays below structured
+LR on four of five partitions, so it is not the best value for this dataset.
 
 \textbf{Fusion trade-off.} Structured fields add information that need not be present in truncated
-text, but fusion changes both ranking and the validation-selected decision threshold. Top-two fusion
-improves validation AP on all five splits yet lowers mean test AP, while full fusion changes mean
-test AP by only $+0.0106$. The evidence therefore does not justify calling structured fusion a neural
-improvement. The classical structured ablation likewise separates a small AP gain from lower F1.
+text, and with top-two tuning they raise mean test AP by 0.050. Once the whole encoder is tuned, the
+fused model loses 0.018 AP on average, so the text representation already captures what the fields
+add. The classical ablation shows the same pattern at a smaller scale: a 0.019 AP gain for structured
+LR on three of five splits.
 
-\textbf{Dependence and thresholds.} The 101 positive rows in the seed-2 test exact-connector
-component show how a large group can dominate a nominal 171-positive evaluation. Group-disjoint
-fitting prevents that component from crossing a partition boundary, but all its rows still
-contribute together to one test metric. Validation/test reversals and wide F1 deviations also show
-that a threshold chosen by validation F1 does not guarantee a stable operating point.
+\textbf{Dependence and thresholds.} Group-disjoint partitions stop a related-ad group from crossing a
+boundary, but all rows of a group still contribute together to one test metric. The largest fraud
+group supplies 10.7\%--32.2\% of a test partition's fraud ads, and the five largest supply
+36.5\%--54.7\%, so the nominal 137--187 positives are not independent examples. Validation/test
+reversals and wide F1 deviations also show that a threshold chosen by validation F1 does not
+guarantee a stable operating point.
 
 \textbf{One-class objective.} One-class SVM learns a boundary around known-real training examples,
 not a fraud ranking objective. Fraudulent ads can resemble ordinary vacancies or form dense

@@ -2,23 +2,24 @@
 \label{conclusion}
 
 \textbf{Main result.} Across five saved grouped partitions, structured TF-IDF logistic regression
-has the highest mean test AP, $0.5928 \pm 0.1651$. Text-only LR remains competitive at
-$0.5762 \pm 0.1875$ AP and has higher mean F1, 0.5301 versus 0.4633. Structured fields are thus a
-small, split-dependent ranking addition rather than a uniform improvement.
+has the highest mean test AP, $0.675 \pm 0.138$. Text-only LR remains close at $0.657 \pm 0.124$, and
+structured fields improve test AP on only three of five partitions, so they are a small,
+split-dependent addition rather than a uniform improvement.
 
-\textbf{Neural result.} Full text and full fused achieve mean AP $0.4941$ and $0.5047$, but both lose
-all five paired test-AP comparisons to structured LR.
+\textbf{Neural result.} Full text and full fused fine-tuning reach mean AP $0.615$ and $0.597$; both
+lose four of five paired test-AP comparisons to structured LR.
 
-\textbf{Adaptation and fusion.} Full fine-tuning improves mean AP over top-two tuning by only 0.0245
-for text and 0.0474 for fused inputs, with positive differences on two and three partitions. Late
-structured fusion is unstable across validation and test, including a full-fused-minus-text mean
-test-AP change of $+0.0106$ on only two positive partitions. Neither more trainable parameters nor
-fusion produces a demonstrated neural winner.
+\textbf{Adaptation and fusion.} Full fine-tuning improves mean AP over top-two tuning by 0.106 for
+text and 0.037 for fused inputs, on five and four partitions, the most consistent neural effect
+found. Late structured fusion helps top-two tuning ($+0.050$ AP, four partitions) but not full tuning
+($-0.018$, two partitions). Explanations of the fully tuned model point to the company profile and to
+clerical-work and earnings vocabulary.
 
-\textbf{Methodological result.} Exact related-ad grouping, training-local preprocessing, a majority
-floor, validation-selected epochs and thresholds, saved row scores and paired contrasts expose
-variability that headline accuracy would hide. The seed-2 concentration and truncation audit further
-show why group composition and field survival must accompany aggregate metrics.
+\textbf{Methodological result.} Randomized related-ad grouping, training-local preprocessing, a
+majority floor, validation-selected epochs and thresholds, saved row scores and paired contrasts
+expose variability that headline accuracy would hide. The seed-2 prevalence dip, group
+concentration and truncation audit further show why partition composition and field survival must
+accompany aggregate metrics.
 
 \textbf{Next step.} A stronger evaluation should freeze the analysis, repeat several optimization
 seeds within each saved partition, and then evaluate once on an untouched external or

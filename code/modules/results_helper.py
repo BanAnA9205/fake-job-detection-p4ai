@@ -11,6 +11,7 @@ import os
 
 import numpy as np
 import pandas as pd
+from modules.eval_helper import evaluate, pick_threshold
 
 
 def _plain(obj):
@@ -109,7 +110,47 @@ def load_results(*out_dirs):
             row = {"model": r["model"], "group": r["group"], "seed": r["seed"], "thr": r["thr"],
                    "train_pr_auc": r.get("train_pr_auc"), "seconds": r.get("seconds")}
             for split in ("val", "test"):
-                for k in ("pr_auc", "roc_auc", "f1", "precision", "recall"):
+                for k in ("pr_auc", "f1", "precision", "recall"):
                     row[f"{split}_{k}"] = r[split][k]
             rows.append(row)
     return pd.DataFrame(rows)
+
+
+def verify_results(expected, y, split_cache, fingerprint):
+    """Load an exact result matrix after recomputing every saved metric from its raw scores.
+
+    `expected` maps each output folder to the model names it must hold, each for every seed in
+    `split_cache`. Every run must match the cleaned-data fingerprint and the exact split rows and
+    labels, reproduce its saved validation/test metrics, and use the validation-F1 threshold
+    (the majority dummy keeps its fixed 0.5 threshold).
+    """
+    y = np.asarray(y)
+    seeds = sorted(split_cache)
+    for out_dir, models in expected.items():
+        want = {(model, seed) for model in models for seed in seeds}
+        for suffix in ("json", "npz"):
+            have = {(os.path.basename(p).rsplit("_seed", 1)[0], int(p.rsplit("_seed", 1)[1].split(".")[0]))
+                    for p in glob.glob(os.path.join(out_dir, f"*_seed*.{suffix}"))}
+            if have != want:
+                raise ValueError(f"{suffix} inventory mismatch in {out_dir}: "
+                                 f"missing {sorted(want - have)}, extra {sorted(have - want)}")
+        for model in models:
+            for seed in seeds:
+                with open(_paths(out_dir, model, seed)[0], encoding="utf-8") as f:
+                    record = json.load(f)
+                scores = load_scores(out_dir, model, seed)
+                split = split_cache[seed]
+                assert_result_lineage(record, scores, fingerprint, split["val"], split["test"])
+                for name in ("val", "test"):
+                    labels, values = scores[f"y_{name}"], scores[f"score_{name}"]
+                    if not np.array_equal(labels, y[split[name]]):
+                        raise ValueError(f"{model} seed {seed}: saved {name} labels do not match the split")
+                    if not np.isfinite(values).all():
+                        raise ValueError(f"{model} seed {seed}: non-finite {name} scores")
+                    recomputed = evaluate(labels, values, record["thr"])
+                    if any(not np.isclose(record[name][k], v) for k, v in recomputed.items()):
+                        raise ValueError(f"{model} seed {seed}: saved {name} metrics differ from recomputed")
+                fixed = 0.5 if model == "dummy_majority" else pick_threshold(scores["y_val"], scores["score_val"])
+                if record["thr"] != fixed:
+                    raise ValueError(f"{model} seed {seed}: threshold is not the validation-F1 threshold")
+    return load_results(*expected)

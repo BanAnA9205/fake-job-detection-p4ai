@@ -1,0 +1,35 @@
+% Experimental protocol: two model families between shared data and a shared decision rule.
+\begin{tikzpicture}[
+  font=\footnotesize,
+  box/.style={draw, line width=0.4pt, minimum height=18mm, text width=34mm, align=center,
+              inner sep=3pt},
+  shared/.style={box, text width=29mm, fill=black!7},
+  arr/.style={-{Stealth[length=1.5mm, width=1.2mm]}, line width=0.4pt},
+  lane/.style={font=\footnotesize\itshape, anchor=south west, inner sep=0pt, yshift=1mm},
+  node distance=4mm,
+]
+\node[box, text width=17mm] (data) {EMSCAD\\17,597 ads\\5 splits};
+
+\node[box, anchor=west] (feat) at ($(data.east)+(7mm,13mm)$) {TF-IDF of ad text\\+ structured fields};
+\node[box, right=of feat] (clf) {LR, decision tree,\\one-class SVM;\\LR also on text only};
+\node[box, anchor=west] (bert) at ($(data.east)+(7mm,-13mm)$) {DistilBERT on text;\\fused variants add\\structured fields};
+\node[box, right=of bert] (epoch) {Fine-tune top 2\\or all layers; best\\epoch by AP on $\mathcal{D}_{\mathrm{va}}$};
+
+\node[lane] at (feat.north west) {Classical};
+\node[lane] at (bert.north west) {Fine-tuned DistilBERT};
+
+\coordinate (J) at ($(clf.east |- data.east)+(3.5mm,0)$);
+\node[shared, anchor=west] (thr) at ($(J)+(3.5mm,0)$) {Threshold $\tau$:\\best $F_1$ on $\mathcal{D}_{\mathrm{va}}$};
+\node[shared, right=of thr] (test) {Test on $\mathcal{D}_{\mathrm{te}}$:\\AP; $P$, $R$, $F_1$ at $\tau$};
+
+\coordinate (F) at ($(data.east)+(3.5mm,0)$);
+\draw (data.east) -- (F);
+\draw[arr] (F) |- (feat.west);
+\draw[arr] (F) |- (bert.west);
+\draw[arr] (feat) -- (clf);
+\draw[arr] (bert) -- (epoch);
+\draw (clf.east) -| (J);
+\draw (epoch.east) -| (J);
+\draw[arr] (J) -- (thr.west);
+\draw[arr] (thr) -- (test);
+\end{tikzpicture}

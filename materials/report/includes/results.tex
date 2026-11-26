@@ -6,9 +6,10 @@
 \subsubsection{Headline comparison and variability}
 
 \textbf{Overall ranking.} Table~\ref{tab:classical-results} compares the classical pipelines over
-five test partitions. Structured LR has the highest mean AP, $0.5928 \pm 0.1651$, followed by
-text-only LR at $0.5762 \pm 0.1875$. Their mean F1 values are $0.4633$ and $0.5301$, so the
-ranking by AP and the choice by thresholded F1 need not agree.
+five test partitions. Structured LR has the highest mean AP, $0.675 \pm 0.138$, followed by
+text-only LR at $0.657 \pm 0.124$; their mean F1 values are 0.619 and 0.601. The decision tree reaches
+$0.416 \pm 0.135$ AP. The one-class SVM, which never sees fraud labels when fitting, scores
+$0.049 \pm 0.005$ AP, indistinguishable from the majority dummy's prevalence floor of 0.048.
 
 \begin{table}[tb]
 \centering
@@ -29,12 +30,12 @@ dummy's fixed threshold. These are saved elapsed times, not controlled end-to-en
 \end{table}
 
 \textbf{Split variability.} Figure~\ref{fig:seeds} exposes the spread hidden by a mean score. All
-four fine-tuned variants reach only 0.232 to 0.256 AP on seed 2, and several standard deviations in
-Tables~\ref{tab:classical-results} and~\ref{tab:deep-results} exceed the between-family mean gaps.
-One component built by the exact connector rule supplies 101 of the 171 fraud positives in seed-2
-test data. This construction does not confirm that the component is one real-world fraud campaign.
-Its concentration makes a nominal row-level score strongly dependent on one exact related-ad group,
-so it should not be interpreted as 171 independent examples of fraud detection.
+four fine-tuned variants have their lowest test AP on seed 2, between 0.264 and 0.423. That test
+partition has the fewest fraud ads (137, a prevalence of 3.98\% against 4.75\%--5.21\% elsewhere),
+and AP scales with prevalence, so part of this dip is a property of the partition rather than of the
+models. Several standard deviations in Tables~\ref{tab:classical-results} and~\ref{tab:deep-results}
+are as large as the between-family mean gaps, which is why the comparisons below are paired within
+partitions.
 
 \begin{figure}[tb]
 \centering
@@ -60,11 +61,11 @@ large departures motivate paired split-level analysis rather than validation-onl
 
 \subsubsection{Classical structured-feature ablation}
 
-\textbf{Effect direction.} Structured LR minus text-only LR has mean validation AP $+0.0333$ and
-mean test AP $+0.0165$, with positive test differences on four of five splits. Seed 0 instead
-changes by $-0.0473$. Mean test F1 changes by $-0.0668$ and improves on only one split. The paired
-values in Table~\ref{tab:paired} and Figure~\ref{fig:ablation} therefore support a small,
-split-dependent ranking effect, not a uniform improvement or a single best classical arm.
+\textbf{Effect direction.} Structured LR minus text-only LR has mean validation AP $+0.002$ and mean
+test AP $+0.019$, with positive test differences on three of five splits; seeds 3 and 4 change by
+$-0.017$ and $-0.048$. Mean test F1 changes by $+0.018$ and improves on two splits. The paired values
+in Table~\ref{tab:paired} and Figure~\ref{fig:ablation} therefore support at most a small,
+split-dependent ranking gain from the structured fields, not a uniform improvement.
 
 \begin{table}[tb]
 \centering
@@ -111,9 +112,9 @@ except the majority dummy's fixed 0.5 threshold. One partition is diagnostic, no
 \subsubsection{Headline comparison}
 
 \textbf{Overall ranking.} Table~\ref{tab:deep-results} compares text-only and structured-fusion
-models under the two fine-tuning budgets. Full fused has the highest mean AP, $0.5047 \pm 0.1696$,
-while full text reaches $0.4941 \pm 0.1645$. Their mean F1 values are $0.4540 \pm 0.2323$ and
-$0.5247 \pm 0.1880$, again showing that AP and thresholded F1 need not select the same arm.
+models under the two fine-tuning budgets. Full text has the highest mean AP, $0.615 \pm 0.109$,
+followed by full fused at $0.597 \pm 0.159$. Their mean F1 values are $0.516 \pm 0.158$ and
+$0.582 \pm 0.141$, so AP and thresholded F1 do not select the same arm.
 
 \begin{table}[tb]
 \centering
@@ -133,17 +134,16 @@ elapsed times, not a controlled hardware benchmark.}
 \label{tab:deep-results}
 \end{table}
 
-\textbf{Comparison with structured TF-IDF LR.} Full text and full fused lose all five paired test-AP
-comparisons to structured LR. Their respective mean AP deficits to that model are 0.0987 and 0.0881.
-Full fine-tuning therefore does not outperform the strongest classical model in these paired runs.
+\textbf{Comparison with structured TF-IDF LR.} Structured LR has higher test AP than full text and
+than full fused on four of five paired partitions each, with mean margins of 0.060 and 0.078 AP. Full
+fine-tuning therefore does not outperform the strongest classical model in these paired runs.
 
 \subsubsection{Adaptation budget and structured fusion}
 
 \textbf{Full versus top two.} Table~\ref{tab:adaptation} reports paired full-minus-top-two changes.
-Mean test AP increases by $+0.0245$ for text, with improvements on two splits, and by $+0.0474$ for
-fusion, with improvements on three. The corresponding validation means are $+0.0745$ and $+0.0180$.
-Updating the whole encoder therefore has small and inconsistent test benefits despite substantial
-variation in individual splits.
+Mean test AP increases by $+0.106$ for text, on all five splits, and by $+0.037$ for fusion, on four.
+The corresponding validation means are $+0.134$ and $+0.093$. Updating the whole encoder is the most
+consistent neural effect in this study, although its size varies widely between splits.
 
 \begin{table}[tb]
 \centering
@@ -162,11 +162,11 @@ full fine-tuning. Win columns report test partitions with strictly positive chan
 \label{tab:adaptation}
 \end{table}
 
-\textbf{Late fusion.} Fusion effects also reverse between validation and test
-(Table~\ref{tab:fusion}). For top-two tuning, mean validation AP rises by 0.0307 on all five splits,
-but mean test AP falls by 0.0123 and rises on only two. For full tuning, fused-minus-text mean test
-AP is $+0.0106$ with only two positive splits, while mean validation AP changes by $-0.0258$.
-Full-model fusion also reduces mean test F1 by 0.0707. No stable fusion gain is established.
+\textbf{Late fusion.} Fusion effects depend on the adaptation budget (Table~\ref{tab:fusion}). With
+top-two tuning, fused-minus-text mean test AP is $+0.050$ with four positive splits, and test F1
+improves on all five. With full tuning, mean test AP changes by $-0.018$ with only two positive
+splits, and mean validation AP by $-0.022$. Structured fields thus help the smaller adaptation budget
+but add nothing measurable once the whole encoder is tuned.
 
 \begin{table}[tb]
 \centering
@@ -193,20 +193,20 @@ validation and test partitions. Positive values favour full encoder fine-tuning;
 \label{fig:adaptation-ablation}
 \end{figure}
 
-\textbf{Saved run time.} Full text and full fused average approximately 155.0 and 155.7 seconds per
-partition, compared with 106.4 and 107.2 seconds for the corresponding top-two runs. These records
+\textbf{Saved run time.} Full text and full fused average approximately 162.1 and 154.4 seconds per
+partition, compared with 128.1 and 118.0 seconds for the corresponding top-two runs. These records
 describe the observed runs, not a controlled efficiency comparison; no common hardware benchmark
 measures end-to-end development or serving cost across every family.
 
 \subsubsection{Token coverage and operating points}
 
-\textbf{Truncation audit.} On seed-0 training data, the 512-token cap covers 53.12\% of real and
-88.72\% of fraud documents. The mean removed-token fraction over every document, assigning zero
-removal to documents within the cap, is 13.10\% for real and 2.86\% for fraud ads. In the
-approximate sequential field
-audit among nonempty field entries, mean real-token survival is 68.05\% for requirements and 49.25\% for benefits, compared with
-92.21\% and 92.58\% for fraud ads. Late-field loss is consequently class-dependent and descriptive,
-not evidence that the removed text causes prediction errors.
+\textbf{Truncation audit.} On seed-0 training data, the 512-token cap covers 52.11\% of real and
+71.59\% of fraud documents. The mean removed-token fraction over every document, assigning zero
+removal to documents within the cap, is 13.37\% for real and 8.53\% for fraud ads. In the
+approximate sequential field audit among nonempty field entries, mean real-token survival is 69.40\%
+for requirements and 51.82\% for benefits, compared with 81.38\% and 74.09\% for fraud ads. Late-field
+loss is consequently class-dependent; the field-occlusion analysis in Section~\ref{sec:explain-neural}
+shows that requirements and benefits carry no measurable AP for the full text model.
 
 \textbf{Thresholded profiles.} Figure~\ref{fig:metrics} separates precision, recall and F1 rather
 than reducing every model to AP. Each threshold maximizes validation F1 independently, and wide F1

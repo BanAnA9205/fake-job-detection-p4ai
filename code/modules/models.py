@@ -63,12 +63,12 @@ class OneClassDetector(ClassifierMixin, BaseEstimator):
 
 def _logreg(seed: int) -> LogisticRegression:
     return LogisticRegression(
-        class_weight="balanced", solver="liblinear", max_iter=1000, random_state=seed
+        solver="liblinear", max_iter=1000, random_state=seed
     )
 
 
 def get_models(seed: int = 0) -> dict[str, object]:
-    """Return the two LR feature variants, decision tree, and one-class detector."""
+    """Return the two LR feature variants, decision tree, and one-class detector (no class weights)."""
     return {
         "logreg_text": Pipeline([
             ("pre", make_preprocessor(structured=False)),
@@ -80,11 +80,12 @@ def get_models(seed: int = 0) -> dict[str, object]:
         ]),
         "tree": Pipeline([
             ("pre", make_preprocessor()),
-            ("clf", DecisionTreeClassifier(class_weight="balanced", random_state=seed)),
+            ("clf", DecisionTreeClassifier(random_state=seed)),
         ]),
-        # PCA reduces sparse TF-IDF before the RBF kernel; all stages see real rows only.
+        # Same features as structured LR; PCA makes the sparse matrix usable for the RBF kernel.
+        # All stages are fitted on real rows only.
         "ocsvm": OneClassDetector(Pipeline([
-            ("pre", ColumnTransformer([("text", make_tfidf(), "text")])),
+            ("pre", make_preprocessor()),
             ("pca", PCA(n_components=100, svd_solver="arpack", random_state=seed)),
             ("norm", Normalizer()),
             ("svm", OneClassSVM(kernel="rbf", nu=0.1, gamma="scale")),
@@ -92,15 +93,16 @@ def get_models(seed: int = 0) -> dict[str, object]:
     }
 
 
+# Log-spaced grids. Tree and one-class SVM selections are interior; LR's CV AP is flat for C >= 100.
 PARAM_GRIDS = {
-    "logreg_text": {"clf__C": [0.1, 1, 10]},
-    "logreg": {"clf__C": [0.1, 1, 10]},
+    "logreg_text": {"clf__C": [0.1, 1, 10, 100, 1000, 10000]},
+    "logreg": {"clf__C": [0.1, 1, 10, 100, 1000, 10000]},
     "tree": {
         "clf__max_depth": [5, 10, None],
-        "clf__min_samples_leaf": [1, 10],
+        "clf__min_samples_leaf": [1, 10, 30, 100],
     },
     "ocsvm": {
         "detector__svm__nu": [0.05, 0.1],
-        "detector__svm__gamma": [1.0, 10.0, 30.0],
+        "detector__svm__gamma": [1.0, 10.0, 30.0, 100.0, 300.0],
     },
 }

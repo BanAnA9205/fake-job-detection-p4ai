@@ -1,0 +1,30 @@
+% Fine-tuned DistilBERT classifier with optional late fusion of structured fields.
+\begin{tikzpicture}[
+  font=\footnotesize,
+  box/.style={draw, line width=0.4pt, minimum height=11mm, align=center, inner sep=3pt},
+  arr/.style={-{Stealth[length=1.5mm, width=1.2mm]}, line width=0.4pt},
+  brace/.style={decorate, decoration={brace, amplitude=4pt}, line width=0.4pt},
+  node distance=4mm,
+]
+\node[align=center] (x) {Ad text\\($\le 512$ tokens)};
+\node[box, right=of x] (low) {Embeddings\\+ layers 0--3};
+\node[box, right=of low] (high) {Layers 4--5};
+\node[box, right=13mm of high] (proj) {Linear, ReLU,\\dropout};
+\node[box, right=of proj] (cat) {Concat};
+\node[box, right=of cat] (head) {Linear\\$\to$ 2 logits};
+\node[right=of head] (s) {$\ell_{\mathrm{fraud}}-\ell_{\mathrm{real}}$};
+\node[align=center, below=8mm of cat] (z) {structured vector $z$\\(fused models only)};
+
+\draw[arr] (x) -- (low);
+\draw[arr] (low) -- (high);
+\draw[arr] (high) -- node[above] {$h_{\textsc{cls}}$} node[below] {$\mathbb{R}^{768}$} (proj);
+\draw[arr] (proj) -- (cat);
+\draw[arr] (cat) -- (head);
+\draw[arr] (head) -- (s);
+\draw[arr, densely dashed] (z) -- (cat);
+
+\draw[brace] ($(high.north west)+(0,1.5mm)$) -- ($(head.north east)+(0,1.5mm)$)
+  node[midway, above=4pt] {fine-tune top 2 layers: 14.77M parameters trained};
+\draw[brace] ($(low.north west)+(0,9mm)$) -- ($(head.north east)+(0,9mm)$)
+  node[midway, above=4pt] {fine-tune all layers: 66.96M parameters trained};
+\end{tikzpicture}
