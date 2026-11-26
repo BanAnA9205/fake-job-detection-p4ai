@@ -12,8 +12,8 @@ lose four of five paired test-AP comparisons to structured LR.
 \textbf{Adaptation and fusion.} Full fine-tuning improves mean AP over top-two tuning by 0.106 for
 text and 0.037 for fused inputs, on five and four partitions, the most consistent neural effect
 found. Late structured fusion helps top-two tuning ($+0.050$ AP, four partitions) but not full tuning
-($-0.018$, two partitions). Explanations of the fully tuned model point to the company profile and to
-clerical-work and earnings vocabulary.
+($-0.018$, two partitions). Explanations of the fully tuned model point to the title, company profile and
+description, and to clerical-work and earnings vocabulary.
 
 \textbf{Methodological result.} Randomized related-ad grouping, training-local preprocessing, a
 majority floor, validation-selected epochs and thresholds, saved row scores and paired contrasts
@@ -23,5 +23,4 @@ accompany aggregate metrics.
 
 \textbf{Next step.} A stronger evaluation should freeze the analysis, repeat several optimization
 seeds within each saved partition, and then evaluate once on an untouched external or
-time/source-split dataset with a prespecified operating rule. Until then, the findings remain
-exploratory and carry no statistical-significance, equivalence or deployment-readiness claim.
+time/source-split dataset with a prespecified operating rule.

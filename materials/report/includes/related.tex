@@ -12,7 +12,26 @@ fine-tuning~\cite{devlin2019}. Akram et al.~\cite{akram2024} study BERT and RoBE
 variants on an expanded multi-source corpus. Fraud-BERT~\cite{taneja2025} reports macro F1 0.93 for
 full BERT fine-tuning on one 80:20 EMSCAD row split, but does not document deduplication or repeated
 optimization seeds. Different data sources, prevalence, split rules and metric averaging preclude
-placing those scores and ours in one leaderboard.
+placing those scores and ours in one leaderboard; Table~\ref{tab:related} summarizes why.
+
+\begin{table}[tb]
+\centering
+\small
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.15\linewidth}>{\raggedright\arraybackslash}p{0.24\linewidth}>{\raggedright\arraybackslash}p{0.30\linewidth}>{\raggedright\arraybackslash}p{0.21\linewidth}}
+\toprule
+\textbf{Study} & \textbf{Models} & \textbf{Data and evaluation} & \textbf{Reported result} \\
+\midrule
+Vidros et al.~\cite{vidros2017} & Bag-of-words with standard classifiers & EMSCAD, curated balanced subset & Balanced-subset scores only \\
+Amaar et al.~\cite{amaar2022} & Machine-learning classifiers on text features & EMSCAD, resampled test set & 99.9\% accuracy \\
+Akram et al.~\cite{akram2024} & BERT and RoBERTa with ten SMOTE variants & Expanded multi-source corpus & About 90\% balanced accuracy and recall \\
+Taneja et al.~\cite{taneja2025} & Full BERT-base fine-tuning; SVM, RF, LR baselines & EMSCAD, one 80:20 row split, no deduplication reported & Macro F1 0.93 (LR baseline 0.78) \\
+This work & TF-IDF LR, tree, one-class SVM; DistilBERT, two budgets & Deduplicated EMSCAD, five grouped 60/20/20 partitions, natural prevalence & Test AP $0.675\pm0.138$ (structured LR), $0.615\pm0.109$ (DistilBERT) \\
+\bottomrule
+\end{tabular}
+\caption{Prior EMSCAD studies differ in data, resampling and split design, so their headline numbers
+are not comparable with each other or with ours.}
+\label{tab:related}
+\end{table}
 
 \textbf{Adaptation choices.} DistilBERT provides a smaller distilled transformer~\cite{sanh2019},
 but its original efficiency results do not establish superiority on job-fraud detection. We compare

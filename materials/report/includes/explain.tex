@@ -71,30 +71,31 @@ one templated series of controls-engineer ads that the model scores as ordinary 
 \subsection{Fine-tuned DistilBERT}
 \label{sec:explain-neural}
 
-\textbf{Model and evidence.} The explained model is the full fine-tuned text-only model on seed 0
-(test AP 0.640). It is chosen by design: it has the largest adaptation budget, and without structured
-inputs every prediction comes from the text, so text attributions are complete. Two views are
-computed on its seed-0 test partition.
+\textbf{Model and evidence.} The explained model is the full fine-tuned text-only model. It is chosen
+by design: it has the largest adaptation budget, and without structured inputs every prediction
+comes from the text, so text attributions are complete. Field occlusion is repeated on all five
+partitions; integrated gradients are computed on seed 0 (test AP 0.640).
 
 \textbf{Field occlusion.} Table~\ref{tab:field-occlusion} blanks one text field for every test ad,
-re-scores the ads and reports the resulting test AP. Removing the company profile costs the most
-ranking quality, 0.097 AP, consistent with the profile-presence gap in Figure~\ref{fig:eda-flags};
-the title costs 0.031. Blanking the description changes AP by only 0.006, although it moves fraud
-margins the most, so for ranking its information is largely shared with the other fields.
-Requirements and benefits carry no measurable AP for this model.
+re-scores the ads and reports the resulting drop in test AP. The title, company profile and
+description each cost between 0.081 and 0.094 mean AP when removed, on all five partitions; the
+company-profile effect is consistent with the profile-presence gap in Figure~\ref{fig:eda-flags}.
+Requirements and benefits carry almost no AP ($+0.010$ and $-0.011$), so the truncation of these
+late fields measured in Section~\ref{results} costs little ranking quality for this model.
 
 \begin{table}[tb]
 \centering
 \small
-\begin{tabular}{lrrr}
+\begin{tabular}{lrcc}
 \toprule
-\textbf{Blanked field} & \textbf{Ads with field} & \textbf{Test AP} & \textbf{AP drop} \\
+\textbf{Blanked field} & \textbf{Ads with field} & \textbf{Test AP drop} & \textbf{Positive} \\
 \midrule
 \tabinput{includes/tab_field_occlusion}
 \bottomrule
 \end{tabular}
-\caption{Field occlusion for the seed-0 full fine-tuned text model (test AP 0.640 with every field).
-Each row blanks one field for all test ads; positive drops mean the field helps ranking.}
+\caption{Field occlusion for the full fine-tuned text model over five partitions (mean $\pm$
+sample standard deviation of the test-AP drop, and partitions with a positive drop). Each row blanks
+one field for every test ad; positive drops mean the field helps ranking.}
 \label{tab:field-occlusion}
 \end{table}
 

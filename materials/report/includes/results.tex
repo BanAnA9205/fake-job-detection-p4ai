@@ -206,7 +206,7 @@ removal to documents within the cap, is 13.37\% for real and 8.53\% for fraud ad
 approximate sequential field audit among nonempty field entries, mean real-token survival is 69.40\%
 for requirements and 51.82\% for benefits, compared with 81.38\% and 74.09\% for fraud ads. Late-field
 loss is consequently class-dependent; the field-occlusion analysis in Section~\ref{sec:explain-neural}
-shows that requirements and benefits carry no measurable AP for the full text model.
+shows that requirements and benefits carry almost no AP for the full text model.
 
 \textbf{Thresholded profiles.} Figure~\ref{fig:metrics} separates precision, recall and F1 rather
 than reducing every model to AP. Each threshold maximizes validation F1 independently, and wide F1
@@ -219,9 +219,8 @@ variation shows that this operating rule transfers unevenly across partitions.
 \label{fig:metrics}
 \end{figure}
 
-\textbf{Seed-0 curves.} Figure~\ref{fig:pr-curves} gives a score-level view for one already inspected
-partition. It is a diagnostic illustration, not a basis for model selection; the means and paired
-contrasts above carry the comparative evidence.
+\textbf{Seed-0 curves.} Figure~\ref{fig:pr-curves} gives a score-level view of one partition; the
+means and paired contrasts above carry the comparative evidence.
 
 \begin{figure}[tb]
 \centering
@@ -243,7 +242,6 @@ adaptation budgets and input types.
 \includegraphics[width=0.98\linewidth]{confusion_deep.pdf}
 \caption{Deep-learning confusion matrices on the seed-0 test partition. Rows are actual labels,
 columns are predicted labels, and cells contain TN, FP, FN and TP. Every threshold is selected on
-validation F1 only. These seed-0 counts are diagnostic and do not select a model or summarize all
-five partitions.}
+validation F1 only.}
 \label{fig:confusion-deep}
 \end{figure}

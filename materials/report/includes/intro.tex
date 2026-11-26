@@ -24,14 +24,12 @@ AP, and structured LR beats both full-model variants on four of five paired part
 fine-tuning improves on tuning only the top two layers on all five partitions for text (mean
 $+0.106$ AP) and on four for fusion ($+0.037$). Structured fields help the top-two models but not the
 fully tuned ones, and a one-class SVM trained without fraud labels does no better than the prevalence
-floor. Integrated gradients and field occlusion show that the fine-tuned model relies most on the
-company profile and on clerical-work and earnings vocabulary.
+floor. Integrated gradients and field occlusion show that the fine-tuned model relies on the title,
+company profile and description, and on clerical-work and earnings vocabulary.
 
-\textbf{Scope.} These are exploratory comparisons on one dataset, not evidence of statistical
-equivalence or deployment readiness. The five partitions overlap, and each transformer partition
-has one declared optimization seed, so partition and optimization variability are confounded.
-Full-data EDA and inspected seed-0 diagnostics further require a fresh evaluation before any
-confirmatory claim.
+\textbf{Scope.} The comparisons are exploratory and limited to one dataset: the partitions overlap,
+each transformer partition has one optimization seed, and full-data EDA informed the design.
+Section~\ref{discussion} discusses these limits.
 
 \textbf{Code availability.} The notebooks, shared modules and saved splits, which also regenerate
 every figure and table in this report, are available at \url{https://github.com/BanAnA9205/fake-job-detection-p4ai}.
