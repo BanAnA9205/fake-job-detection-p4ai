@@ -9,8 +9,9 @@ These are mechanisms for further controlled tests, not causes demonstrated by th
 Full fine-tuning still falls below structured LR on four of five paired partitions.
 
 \textbf{Adaptation value.} Full tuning improves on top-two tuning on all five splits for text and
-four for fusion, by 0.106 and 0.037 mean test AP. The extra trainable parameters are therefore worth
-their roughly 35 additional seconds per partition here, but even full tuning stays below structured
+four for fusion, by 0.106 and 0.037 mean test AP, although a second optimization seed lowers the text
+gain to 0.075 on three of five splits. The extra trainable parameters are therefore worth their
+roughly 35 additional seconds per partition here, but even full tuning stays below structured
 LR on four of five partitions, so it is not the best value for this dataset.
 
 \textbf{Fusion trade-off.} Structured fields add information that need not be present in truncated
@@ -39,7 +40,8 @@ paraphrased campaigns, employers, URLs, data sources or collection periods. No t
 or external-dataset evaluation is available, so the reported estimand is limited to these saved
 same-dataset grouped partitions.
 
-\textbf{Selection history.} Full cleaned-data EDA informed feature design, and seed-0 test scores,
+\textbf{Selection history.} Full cleaned-data EDA informed feature design (the training-only
+check in Section~\ref{data} confirms its clear decisions but not three borderline ones), and seed-0 test scores,
 curves and explanations were inspected during development. Model fitting and threshold selection do
 not read test labels, but this later inspection can influence reported choices. The results are thus
 exploratory rather than a pristine confirmatory evaluation.
@@ -49,11 +51,12 @@ rows within an exact related-ad group remain dependent. Means, sample standard d
 counts are descriptive across selected resamplings, not five independent replicates. No statistical
 significance, statistical equivalence or population-level superiority is claimed.
 
-\textbf{Optimization confounding.} Transformer runs use one declared optimization seed per partition.
-The same index changes both data assignment and optimization conditions, so observed variation
-mixes split and seed sensitivity. Repeated optimization seeds on unchanged partitions are required
-to estimate those components separately. Classical tuning instead uses compact grids, so the search
-procedures are not matched across model families.
+\textbf{Optimization confounding.} Transformer runs use one declared optimization seed per partition,
+so the main tables mix split and seed sensitivity. The second-seed check for the full text model
+(Section~\ref{results}) shows that optimization alone moves test AP by 0.047 on average on the same
+split, about half the split-to-split spread; per-split wins for the adaptation contrast should
+therefore be read with that margin in mind. Classical tuning instead uses compact grids, so the
+search procedures are not matched across model families.
 
 \textbf{Input and operating limits.} Fine-tuning truncates at 512 tokens. Measured class-dependent
 field loss makes this a material limitation, but the audit does not quantify the predictive value of

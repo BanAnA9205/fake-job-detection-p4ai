@@ -21,14 +21,15 @@ data, not test labels, for model or epoch selection and threshold choice.
 test average precision (AP), $0.675 \pm 0.138$, followed by text-only logistic regression at
 $0.657 \pm 0.124$. The strongest neural mean is full fine-tuning on text alone, $0.615 \pm 0.109$
 AP, and structured LR beats both full-model variants on four of five paired partitions. Full
-fine-tuning improves on tuning only the top two layers on all five partitions for text (mean
-$+0.106$ AP) and on four for fusion ($+0.037$). Structured fields help the top-two models but not the
+fine-tuning improves on tuning only the top two layers by $+0.106$ mean AP for text and $+0.037$ for
+fusion, although a second optimization seed shows that part of this margin is seed noise. Structured fields help the top-two models but not the
 fully tuned ones, and a one-class SVM trained without fraud labels does no better than the prevalence
 floor. Integrated gradients and field occlusion show that the fine-tuned model relies on the title,
 company profile and description, and on clerical-work and earnings vocabulary.
 
 \textbf{Scope.} The comparisons are exploratory and limited to one dataset: the partitions overlap,
-each transformer partition has one optimization seed, and full-data EDA informed the design.
+each transformer partition has one optimization seed (checked with a second seed for the full text
+model), and full-data EDA informed the design (checked against training-only EDA).
 Section~\ref{discussion} discusses these limits.
 
 \textbf{Code availability.} The notebooks, shared modules and saved splits, which also regenerate

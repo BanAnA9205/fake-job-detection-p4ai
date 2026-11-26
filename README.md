@@ -36,7 +36,8 @@ validation F1; test labels are used only for the final report.
 - `code/modules/`  shared data/QC, features, models, evaluation, result I/O and report style
 - `code/tests/`  unit tests for the shared modules
 - `code/splits/`  the five saved partitions (row indices plus a data fingerprint)
-- `code/outputs/`  one JSON + NPZ per model and seed, checkpoints and explanation files (not tracked)
+- `code/outputs/`  one JSON + NPZ per model and seed, checkpoints, explanation files and the
+  second-optimization-seed check in `finetuned_reseed/` (not tracked)
 - `code/features/`  pinned Hugging Face base-model cache (not tracked)
 - `materials/report/`  LaTeX report; the notebooks write its figures (`img/`) and generated tables
 

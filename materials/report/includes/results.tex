@@ -142,8 +142,17 @@ fine-tuning therefore does not outperform the strongest classical model in these
 
 \textbf{Full versus top two.} Table~\ref{tab:adaptation} reports paired full-minus-top-two changes.
 Mean test AP increases by $+0.106$ for text, on all five splits, and by $+0.037$ for fusion, on four.
-The corresponding validation means are $+0.134$ and $+0.093$. Updating the whole encoder is the most
-consistent neural effect in this study, although its size varies widely between splits.
+The corresponding validation means are $+0.134$ and $+0.093$. This is the largest neural effect in
+the study, but its consistency depends partly on the optimization seed: with the second seed
+described below, the text gain is $+0.075$ and positive on three of five splits.
+
+\textbf{Optimization-seed check.} Every transformer partition above has one optimization seed, so
+split and optimization variability are confounded. To measure the optimization part, the full text
+model was retrained on each split with a second, independent seed (split seed plus 100). The two
+seeds differ by 0.047 test AP on average on the same split (from 0.005 to 0.146), whereas the
+standard deviation of their mean across splits is 0.098, so split composition contributes about
+twice as much variability as optimization. The two-seed mean test AP is 0.600, and structured LR
+remains higher on four of five splits with either seed.
 
 \begin{table}[tb]
 \centering

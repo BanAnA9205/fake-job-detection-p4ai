@@ -118,3 +118,10 @@ near-duplicate templates, source dependence or temporal dependence. Across diffe
 validation and test rows can overlap, so the partitions are repeated dependent evaluations rather
 than independent replicates. Preprocessors and estimators are fitted on training data, although
 full-data EDA informed the initial feature design.
+
+\textbf{Training-only EDA check.} Because the EDA used all cleaned ads, its feature decisions were
+recomputed on each saved training partition alone. The four kept derived flags (company profile,
+salary, email, phone) differ between classes by 0.066--0.477 on every training partition, and
+description and requirements medians are lower for fraud in every one, so these decisions do not
+depend on validation or test rows. The three excluded flags are borderline: their class differences
+reach 0.060--0.082 on three partitions, so a training-only EDA could have kept one of them there.
