@@ -71,7 +71,8 @@ epochs, and restores the best checkpoint. Validation is used for epoch selection
 the threshold-selection set, so validation AP is not an unbiased evaluation of the selected epoch.
 
 \textbf{Decision and test rule.} For every non-dummy model and partition, one threshold maximizes
-fraud F1 on validation scores; ties are resolved toward fewer fraud alarms. The majority dummy instead
+fraud F1 on validation scores. F1 is used because it weighs missed fraud and false alarms together
+without a cost model, which EMSCAD does not provide; ties are resolved toward fewer fraud alarms. The majority dummy instead
 uses a fixed threshold of 0.5 on its constant zero probability, so it predicts real everywhere. Each
 threshold is frozen before computing validation and test precision, recall and F1. AP uses the original continuous score:
 positive-class probabilities for logistic regression and decision trees, sign-flipped decision scores
@@ -115,7 +116,8 @@ follow the common implementation interface~\cite{pedregosa2011}.
 \subsection{Selective and full fine-tuning}
 
 \textbf{Architecture.} Both adaptation strategies use \texttt{distilbert-base-uncased} and a custom
-two-logit classifier. The first token state, conventionally called CLS, passes through a 768-to-768
+two-logit classifier. DistilBERT keeps most of BERT's language-understanding performance with 40\%
+fewer parameters~\cite{sanh2019}, which makes 20 fine-tuning runs on one GPU practical. The first token state, conventionally called CLS, passes through a 768-to-768
 linear layer, ReLU and dropout (\texttt{seq\_classif\_dropout=0.2}). A text-only model classifies
 this transformed state. A fused model concatenates the dense structured vector with that state
 immediately before the final linear two-logit layer. Top-two tuning freezes embeddings and encoder
@@ -123,7 +125,9 @@ layers 0--3 and trains layers 4--5 plus the head, about 14.77 million parameters
 layers is a fixed partial budget chosen in advance, not a tuned value. Full tuning updates
 every encoder and head parameter, approximately 66.96 million parameters in total.
 
-\textbf{Structured fusion.} The optional late-fusion path is fold-fit: each fused run fits its
+\textbf{Structured fusion.} Fusion is late, at the final layer, so that text-only and fused models
+share the same encoder and head and differ only in that layer's input; this isolates the effect of
+the structured fields. The optional late-fusion path is fold-fit: each fused run fits its
 preprocessor on that partition's training rows only. Nominal values receive missing-category one-hot
 encoding, numeric values receive median imputation and standardization, and binary values receive
 most-frequent imputation. The fitted transform is then applied unchanged to train, validation and

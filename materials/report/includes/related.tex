@@ -45,6 +45,14 @@ more informative when negatives dominate~\cite{saito2015}. Thresholded precision
 reported separately because a better ranking need not produce a better validation-selected
 operating point.
 
+\textbf{Explanation methods.} For linear and tree models, coefficients and impurity importances
+give a global view directly. For transformers, model-agnostic local methods such as
+LIME~\cite{ribeiro2016} and SHAP~\cite{lundberg2017} fit surrogate models or sample feature subsets,
+which needs many forward passes per 512-token document. Integrated gradients~\cite{sundararajan2017}
+instead uses the model's own gradients and satisfies completeness: attributions sum to the score
+difference from a baseline, which can be checked directly. We therefore use integrated gradients
+for tokens, complemented by field occlusion for whole input fields.
+
 \textbf{Positioning.} The project contributes a common exploratory protocol for simple TF-IDF
 baselines, selective fine-tuning, full fine-tuning and late structured fusion. Exact-ad group
 separation, saved scores and paired per-split differences are central to that comparison. The aim is
