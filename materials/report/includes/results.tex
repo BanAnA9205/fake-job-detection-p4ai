@@ -141,18 +141,37 @@ fine-tuning therefore does not outperform the strongest classical model in these
 \subsubsection{Adaptation budget and structured fusion}
 
 \textbf{Full versus top two.} Table~\ref{tab:adaptation} reports paired full-minus-top-two changes.
-Mean test AP increases by $+0.106$ for text, on all five splits, and by $+0.037$ for fusion, on four.
-The corresponding validation means are $+0.134$ and $+0.093$. This is the largest neural effect in
-the study, but its consistency depends partly on the optimization seed: with the second seed
-described below, the text gain is $+0.075$ and positive on three of five splits.
+With the first optimization seed, mean test AP increases by $+0.106$ for text, on all five splits, and
+by $+0.037$ for fusion, on four. The second-seed check below shows that these gains are not robust.
 
-\textbf{Optimization-seed check.} Every transformer partition above has one optimization seed, so
-split and optimization variability are confounded. To measure the optimization part, the full text
-model was retrained on each split with a second, independent seed (split seed plus 100). The two
-seeds differ by 0.047 test AP on average on the same split (from 0.005 to 0.146), whereas the
-standard deviation of their mean across splits is 0.098, so split composition contributes about
-twice as much variability as optimization. The two-seed mean test AP is 0.600, and structured LR
-remains higher on four of five splits with either seed.
+\textbf{Optimization-seed check.} Every transformer partition has one optimization seed in the main
+tables, so split and optimization variability are confounded. All four fine-tuned models were
+therefore retrained on every split with a second, independent seed (split seed plus 100).
+Retraining moves test AP on the same split by 0.047--0.052 on average for the full models and by
+0.071--0.096 for the top-two models, against split-to-split standard deviations of 0.098--0.187.
+Table~\ref{tab:reseed} recomputes every paired neural contrast with each seed. Two conclusions
+survive: structured LR beats both full models on four or five of five splits with either seed, and
+fusion does not help the fully tuned model. The full-over-top-two gains shrink to $+0.032$ and
+$+0.009$, and the top-two fusion gain to $+0.008$, so those effects cannot be separated from
+optimization noise.
+
+\begin{table}[tb]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lcccc}
+\toprule
+& \multicolumn{2}{c}{\textbf{Seed $s$}} & \multicolumn{2}{c}{\textbf{Seed $s+100$}} \\
+\textbf{Paired contrast} & \textbf{Mean $\Delta$AP} & \textbf{Positive} & \textbf{Mean $\Delta$AP}
+& \textbf{Positive} \\
+\midrule
+\tabinput{includes/tab_reseed}
+\bottomrule
+\end{tabular}
+\caption{Paired test-AP contrasts recomputed with each optimization seed for the four fine-tuned
+models. Positive columns count partitions with a strictly positive difference.}
+\label{tab:reseed}
+\end{table}
 
 \begin{table}[tb]
 \centering
@@ -166,16 +185,16 @@ remains higher on four of five splits with either seed.
 \tabinput{includes/tab_adaptation}
 \bottomrule
 \end{tabular}
-\caption{Paired full-minus-top-two differences over five partitions. Positive values and wins favour
-full fine-tuning. Win columns report test partitions with strictly positive changes.}
+\caption{Paired full-minus-top-two differences over five partitions, first optimization seed
+(Table~\ref{tab:reseed} gives the second). Positive values and wins favour full fine-tuning. Win columns report test partitions with strictly positive changes.}
 \label{tab:adaptation}
 \end{table}
 
-\textbf{Late fusion.} Fusion effects depend on the adaptation budget (Table~\ref{tab:fusion}). With
-top-two tuning, fused-minus-text mean test AP is $+0.050$ with four positive splits, and test F1
-improves on all five. With full tuning, mean test AP changes by $-0.018$ with only two positive
-splits, and mean validation AP by $-0.022$. Structured fields thus help the smaller adaptation budget
-but add nothing measurable once the whole encoder is tuned.
+\textbf{Late fusion.} With the first seed, fusion effects depend on the adaptation budget
+(Table~\ref{tab:fusion}): fused-minus-text mean test AP is $+0.050$ for top-two tuning, on four splits,
+and $-0.018$ for full tuning, on two. With the second seed the top-two gain falls to $+0.008$, while
+full tuning again shows no gain ($-0.014$). Structured fields therefore add nothing measurable to the
+fine-tuned models.
 
 \begin{table}[tb]
 \centering
@@ -189,8 +208,8 @@ but add nothing measurable once the whole encoder is tuned.
 \tabinput{includes/tab_fusion}
 \bottomrule
 \end{tabular}
-\caption{Paired fused-minus-text differences for each adaptation strategy. Positive values and wins
-favour structured late fusion.}
+\caption{Paired fused-minus-text differences for each adaptation strategy, first optimization seed
+(Table~\ref{tab:reseed} gives the second). Positive values and wins favour structured late fusion.}
 \label{tab:fusion}
 \end{table}
 

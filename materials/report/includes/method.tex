@@ -146,4 +146,5 @@ revision and trainable parameter counts.
 transformer initialization and data order. Full and top-two arms share the partition and seed index,
 which supports a paired adaptation contrast within that index. Across indices, however, split
 changes and optimization-seed changes occur together. The five-run differences therefore cannot
-separate partition sensitivity from optimization variability.
+separate partition sensitivity from optimization variability; Section~\ref{results} measures the
+optimization part by retraining every fine-tuned model with a second seed.

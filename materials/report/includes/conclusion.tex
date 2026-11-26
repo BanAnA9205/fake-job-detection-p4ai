@@ -7,13 +7,13 @@ structured fields improve test AP on only three of five partitions, so they are 
 split-dependent addition rather than a uniform improvement.
 
 \textbf{Neural result.} Full text and full fused fine-tuning reach mean AP $0.615$ and $0.597$; both
-lose four of five paired test-AP comparisons to structured LR.
+lose four or five of five paired test-AP comparisons to structured LR, with either optimization seed.
 
-\textbf{Adaptation and fusion.} Full fine-tuning improves mean AP over top-two tuning by 0.106 for
-text and 0.037 for fused inputs, the largest neural effect found; a second optimization seed lowers
-the text gain to 0.075, so part of it is optimization noise. Late structured fusion helps top-two tuning ($+0.050$ AP, four partitions) but not full tuning
-($-0.018$, two partitions). Explanations of the fully tuned model point to the title, company profile and
-description, and to clerical-work and earnings vocabulary.
+\textbf{Adaptation and fusion.} With one optimization seed, full fine-tuning appears to beat top-two
+tuning and fusion appears to help top-two tuning, but retraining with a second seed removes both
+effects, so neither more trainable parameters nor structured fusion has a demonstrated benefit.
+Explanations of the fully tuned model point to the title, company profile and description, and to
+clerical-work and earnings vocabulary.
 
 \textbf{Methodological result.} Randomized related-ad grouping, training-only preprocessing,
 selection on validation data and paired contrasts reveal variability that a single headline score

@@ -8,17 +8,15 @@ lexical cues suit a high-dimensional sparse model, while right truncation can re
 These are mechanisms for further controlled tests, not causes demonstrated by the present scores.
 Full fine-tuning still falls below structured LR on four of five paired partitions.
 
-\textbf{Adaptation value.} Full tuning improves on top-two tuning on all five splits for text and
-four for fusion, by 0.106 and 0.037 mean test AP, although a second optimization seed lowers the text
-gain to 0.075 on three of five splits. The extra trainable parameters are therefore worth their
-roughly 35 additional seconds per partition here, but even full tuning stays below structured
-LR on four of five partitions, so it is not the best value for this dataset.
+\textbf{Adaptation value.} With the first optimization seed, full tuning beats top-two tuning by 0.106
+(text) and 0.037 (fused) mean test AP, but with the second seed these gains fall to 0.032 and 0.009.
+The extra trainable parameters therefore have no demonstrated benefit here beyond optimization noise,
+and even full tuning stays below structured LR on four or five of five partitions.
 
 \textbf{Fusion trade-off.} Structured fields add information that need not be present in truncated
-text, and with top-two tuning they raise mean test AP by 0.050. Once the whole encoder is tuned, the
-fused model loses 0.018 AP on average, so the text representation already captures what the fields
-add. The classical ablation shows the same pattern at a smaller scale: a 0.019 AP gain for structured
-LR on three of five splits.
+text, yet late fusion gives no robust gain to either budget: the top-two gain of 0.050 falls to 0.008
+with the second seed, and the fully tuned model loses AP with both seeds. The classical ablation is
+similarly weak, a 0.019 AP gain for structured LR on three of five splits.
 
 \textbf{Dependence and thresholds.} Group-disjoint partitions stop a related-ad group from crossing a
 boundary, but all rows of a group still contribute together to one test metric. The largest fraud
@@ -51,12 +49,12 @@ rows within an exact related-ad group remain dependent. Means, sample standard d
 counts are descriptive across selected resamplings, not five independent replicates. No statistical
 significance, statistical equivalence or population-level superiority is claimed.
 
-\textbf{Optimization confounding.} Transformer runs use one declared optimization seed per partition,
-so the main tables mix split and seed sensitivity. The second-seed check for the full text model
-(Section~\ref{results}) shows that optimization alone moves test AP by 0.047 on average on the same
-split, about half the split-to-split spread; per-split wins for the adaptation contrast should
-therefore be read with that margin in mind. Classical tuning instead uses compact grids, so the
-search procedures are not matched across model families.
+\textbf{Optimization confounding.} The main tables use one optimization seed per partition. The
+second-seed check (Table~\ref{tab:reseed}) shows that retraining alone moves test AP by 0.047--0.096
+on average on the same split, so only contrasts that hold under both seeds are treated as findings.
+Two seeds are still few; more seeds would be needed to estimate optimization variance precisely.
+Classical tuning instead uses compact grids, so the search procedures are not matched across model
+families.
 
 \textbf{Input and operating limits.} Fine-tuning truncates at 512 tokens. Measured class-dependent
 field loss makes this a material limitation, but the audit does not quantify the predictive value of
