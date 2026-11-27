@@ -24,5 +24,4 @@ materials/report/*.fdb_latexmk
 materials/report/*.out
 materials/report/*.run.xml
 materials/report/*.toc
-materials/report/main.pdf
 materials/report/*SAVE-ERROR

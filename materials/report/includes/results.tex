@@ -39,7 +39,7 @@ partitions.
 
 \begin{figure}[tb]
 \centering
-\includegraphics[width=0.94\linewidth]{test_ap_by_seed.pdf}
+\includegraphics[width=\linewidth]{test_ap_by_seed.pdf}
 \caption{Test AP for each model on five grouped partitions. Points are individual runs, horizontal
 ticks are means and the dashed line is mean fraud prevalence.}
 \label{fig:seeds}
@@ -53,7 +53,7 @@ favourable epoch or threshold.
 
 \begin{figure}[tb]
 \centering
-\includegraphics[width=0.65\linewidth]{validation_vs_test_ap.pdf}
+\includegraphics[width=\linewidth]{validation_vs_test_ap.pdf}
 \caption{Validation and test AP for all 45 runs. The dashed line marks equal validation and test AP;
 large departures motivate paired split-level analysis rather than validation-only conclusions.}
 \label{fig:validation-test}
@@ -69,7 +69,7 @@ split-dependent ranking gain from the structured fields, not a uniform improveme
 
 \begin{table}[tb]
 \centering
-\scriptsize
+\footnotesize
 \setlength{\tabcolsep}{3pt}
 \begin{tabular}{lrrrrrrc}
 \toprule
@@ -157,7 +157,7 @@ optimization noise.
 
 \begin{table}[tb]
 \centering
-\scriptsize
+\footnotesize
 \setlength{\tabcolsep}{4pt}
 \begin{tabular}{lcccc}
 \toprule
@@ -175,7 +175,7 @@ models. Positive columns count partitions with a strictly positive difference.}
 
 \begin{table}[tb]
 \centering
-\scriptsize
+\footnotesize
 \setlength{\tabcolsep}{4pt}
 \begin{tabular}{lrrrcc}
 \toprule
@@ -198,7 +198,7 @@ fine-tuned models.
 
 \begin{table}[tb]
 \centering
-\scriptsize
+\footnotesize
 \setlength{\tabcolsep}{4pt}
 \begin{tabular}{lrrrcc}
 \toprule
@@ -252,7 +252,7 @@ means and paired contrasts above carry the comparative evidence.
 
 \begin{figure}[tb]
 \centering
-\includegraphics[width=0.86\linewidth]{pr_curves_seed0.pdf}
+\includegraphics[width=0.94\linewidth]{pr_curves_seed0.pdf}
 \caption{Seed-0 test precision-recall curves for the primary subset of six models: structured LR,
 text-only LR, top-two text/fusion and full text/fusion. The dashed line is test fraud prevalence on
 that partition.}
@@ -267,7 +267,7 @@ adaptation budgets and input types.
 
 \begin{figure}[tb]
 \centering
-\includegraphics[width=0.98\linewidth]{confusion_deep.pdf}
+\includegraphics[width=0.75\linewidth]{confusion_deep.pdf}
 \caption{Deep-learning confusion matrices on the seed-0 test partition. Rows are actual labels,
 columns are predicted labels, and cells contain TN, FP, FN and TP. Every threshold is selected on
 validation F1 only.}
